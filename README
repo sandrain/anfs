@@ -1,0 +1,11 @@
+The design and implementation of ActiveFS
+
+Written by Hyogi Sim <hyogi@vt.edu>
+
+
+Introduction
+============
+ActiveFS is a new filesystem, which exploits active osds to process active jobs
+in the storage. ActiveFS sits on top of multiple number of active osds.
+
+
