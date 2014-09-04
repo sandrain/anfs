@@ -4,8 +4,8 @@
  * ---------------------------------------------------------------------------
  * meta-scheduler implementation.
  */
-#ifndef	__AFS_SCHED_H__
-#define	__AFS_SCHED_H__
+#ifndef	__ANFS_SCHED_H__
+#define	__ANFS_SCHED_H__
 
 #include <stdio.h>
 #include <pthread.h>
@@ -18,9 +18,9 @@ struct anfs_job;
  * data availability.
  */
 enum {
-	AFS_SCHED_DATA_NONE	= 0,	/** data is not available */
-	AFS_SCHED_DATA_PRODUCED,	/** data have just been produced */
-	AFS_SCHED_DATA_REUSE,		/** can reuse old one from lineage */
+	ANFS_SCHED_DATA_NONE	= 0,	/** data is not available */
+	ANFS_SCHED_DATA_PRODUCED,	/** data have just been produced */
+	ANFS_SCHED_DATA_REUSE,		/** can reuse old one from lineage */
 };
 
 struct anfs_data_file {
@@ -42,16 +42,16 @@ struct anfs_task_data {
  * the states for advancing task in fsm.
  */
 enum {
-	AFS_SCHED_TASK_INIT	= 0,	/* task has been initialized */
-	AFS_SCHED_TASK_BLOCKED,		/* needs some input to be produced */
-	AFS_SCHED_TASK_WAITIO,		/* waiting for data transferring */
-	AFS_SCHED_TASK_AVAIL,		/* all task inputs are available */
-	AFS_SCHED_TASK_READY,		/* task is ready to run */
-	AFS_SCHED_TASK_SKIP,		/* lineage hit, no need to run */
-	AFS_SCHED_TASK_RUNNING,		/* task is currently running */
-	AFS_SCHED_TASK_COMPLETE,	/* task finished successfully */
-	AFS_SCHED_TASK_ABORT,		/* task aborted due to errors */
-	AFS_SCHED_TASK_ABANDONED,	/* task abandoned due to job abort */
+	ANFS_SCHED_TASK_INIT	= 0,	/* task has been initialized */
+	ANFS_SCHED_TASK_BLOCKED,		/* needs some input to be produced */
+	ANFS_SCHED_TASK_WAITIO,		/* waiting for data transferring */
+	ANFS_SCHED_TASK_AVAIL,		/* all task inputs are available */
+	ANFS_SCHED_TASK_READY,		/* task is ready to run */
+	ANFS_SCHED_TASK_SKIP,		/* lineage hit, no need to run */
+	ANFS_SCHED_TASK_RUNNING,		/* task is currently running */
+	ANFS_SCHED_TASK_COMPLETE,	/* task finished successfully */
+	ANFS_SCHED_TASK_ABORT,		/* task aborted due to errors */
+	ANFS_SCHED_TASK_ABANDONED,	/* task abandoned due to job abort */
 };
 
 struct anfs_task {
@@ -61,7 +61,7 @@ struct anfs_task {
 	char *argument;
 	struct list_head list;	/** task list in the anfs_job */
 
-	int status;		/** task status (AFS_SCHED_TASK_..) */
+	int status;		/** task status (ANFS_SCHED_TASK_..) */
 	int ret;		/** exit status after execution */
 
 	pthread_mutex_t stlock;	/** status lock (io_inflight, status) */
@@ -115,13 +115,13 @@ struct anfs_job {
 };
 
 enum {
-	AFS_SCHED_BIND_LAZY	= -1,
+	ANFS_SCHED_BIND_LAZY	= -1,
 
-	AFS_SCHED_POLICY_RR	= 0,	/** default, round-robin */
-	AFS_SCHED_POLICY_INPUT	= 1,	/** input locality */
-	AFS_SCHED_POLICY_MINWAIT = 2,	/** minimum wait--greedy policy */
+	ANFS_SCHED_POLICY_RR	= 0,	/** default, round-robin */
+	ANFS_SCHED_POLICY_INPUT	= 1,	/** input locality */
+	ANFS_SCHED_POLICY_MINWAIT = 2,	/** minimum wait--greedy policy */
 
-	AFS_SCHED_N_POLICIES,
+	ANFS_SCHED_N_POLICIES,
 };
 
 struct anfs_sched {
@@ -226,5 +226,5 @@ void anfs_sched_exit(struct anfs_sched *self);
 
 int anfs_sched_submit_job(struct anfs_sched *self, const uint64_t ino);
 
-#endif	/** __AFS_SCHED_H__ */
+#endif	/** __ANFS_SCHED_H__ */
 

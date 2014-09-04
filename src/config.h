@@ -10,15 +10,12 @@
 struct anfs_config {
 	char *configfile;
 	char *dbfile;
-
-	int update_mtime;	/* update timestamp for each ops? */
+	int update_mtime;		/* update timestamp for each ops? */
 	int update_atime;
-
-	int sched_policy;	/* job scheduling policy */
-
-	uint64_t worker_idle_sleep;
-
-	char *pathdb_path;	/* pathdb path */
+	int sched_policy;		/* job scheduling policy */
+	uint64_t partition;		/* osd partition id */
+	uint64_t worker_idle_sleep;	/* idle sleep time for osd threads */
+	char *pathdb_path;		/* pathdb path */
 };
 
 /**

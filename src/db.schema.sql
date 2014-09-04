@@ -23,7 +23,7 @@ DROP TABLE IF EXISTS anfs_replica;
 -- superblock
 CREATE TABLE anfs_super (
 	id	INTEGER NOT NULL,
-	magic	INTEGER DEFAULT 139810,	-- 0x22222
+	magic	INTEGER DEFAULT 1095648851,	-- 0x414e4653
 	version	INTEGER NOT NULL,	-- version #
 	ctime	INTEGER NOT NULL,	-- creation time of this version
 	ndev	INTEGER NOT NULL,	-- # of devices

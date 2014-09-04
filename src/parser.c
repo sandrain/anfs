@@ -36,16 +36,6 @@ static inline void cleanup_task_data(struct anfs_task *t)
 
 	if (t->input) {
 		td = t->input;
-#if 0
-		for (i = 0; i < td->n_files; i++) {
-			df = td->files[i];
-			if (df) {
-				free(df);
-				df = NULL;
-			}
-
-		}
-#endif
 		free(td);
 	}
 	if (t->output) {
@@ -288,11 +278,11 @@ static int parse_script(struct anfs_parser_data *self)
 		self->datadir = tmp;
 	if (config_lookup_string(config, "schedule", &tmp)) {
 		if (strncmp(tmp, "rr", strlen("rr")) == 0)
-			sched = AFS_SCHED_POLICY_RR;
+			sched = ANFS_SCHED_POLICY_RR;
 		else if (strncmp(tmp, "input", strlen("input")) == 0)
-			sched = AFS_SCHED_POLICY_INPUT;
+			sched = ANFS_SCHED_POLICY_INPUT;
 		else if (strncmp(tmp, "minwait", strlen("minwait")) == 0)
-			sched = AFS_SCHED_POLICY_MINWAIT;
+			sched = ANFS_SCHED_POLICY_MINWAIT;
 		else
 			sched = 0;	/** default */
 	}
@@ -388,111 +378,4 @@ void anfs_parser_cleanup_job(struct anfs_job *job)
 			cleanup_task(t);
 	}
 }
-
-
-/** XXX: we don't spawn a separated thread for now. */
-#if 0
-#include <pthread.h>
-static inline
-struct anfs_parser_data *fetch_work(struct list_head *q, pthread_mutex_t *lock)
-{
-	struct anfs_parser_data *work = NULL;
-
-	pthread_mutex_lock(lock);
-	if (list_empty(q))
-		goto out;
-
-	work = list_first_entry(q, struct anfs_parser_data, list);
-	list_del(&work->list);
-
-out:
-	pthread_mutex_unlock(lock);
-	return work;
-}
-
-static void *parser_worker_func(void *arg)
-{
-	int ret;
-	unsigned long count = 0;
-	struct anfs_parser *parser = (struct anfs_parser *) arg;
-	pthread_mutex_t *lock = &parser->wq_lock;
-	struct list_head *q = &parser->wq;
-	struct anfs_parser_data *work;
-
-	while (1) {
-		work = fetch_work(q, lock);
-		if (!work) {
-			usleep(500);
-			continue;
-		}
-
-		/** process the parsing.. */
-		ret = __parse_job_script(work);
-
-		pthread_cond_signal(&work->cond);
-	}
-
-	return (void *) count;
-}
-
-int anfs_parser_init(struct anfs_parser *self, struct anfs_ctx *ctx)
-{
-	pthread_t t;
-
-	self->ctx = ctx;
-
-	pthread_mutex_init(&self->wq_lock, NULL);
-	INIT_LIST_HEAD(&self->wq);
-
-	t = pthread_create(&t, NULL, &parser_worker_func, self);
-	if (t) {
-		pthread_mutex_destroy(&self->wq_lock);
-		return errno;
-	}
-
-	self->worker = t;
-
-	return 0;
-}
-
-void anfs_parser_exit(struct anfs_parser *self)
-{
-	void *ret;
-
-	pthread_mutex_destroy(&self->wq_lock);
-	(void) pthread_cancel(self->worker);
-	(void) pthread_join(self->worker, &ret);
-}
-
-int anfs_parser_parse_script(struct anfs_parser *self, const char *buf,
-				size_t len, struct anfs_job **job)
-{
-	int ret;
-	struct anfs_parser_data work;
-
-	work.parser = self;
-	work.buf = buf;
-	work.len = len;
-	work.job = NULL;
-	pthread_cond_init(&work.cond, NULL);
-	pthread_mutex_init(&work.lock, NULL);
-
-	pthread_mutex_lock(&self->wq_lock);
-	list_add_tail(&work.list, &self->wq);
-	pthread_mutex_unlock(&self->wq_lock);
-
-	pthread_mutex_lock(&work.lock);
-	ret = pthread_cond_wait(&work.cond, &work.lock);
-	pthread_mutex_unlock(&work.lock);
-
-	if (!work.job)	/** parse failed */
-		ret = -1;
-	else {
-		ret = 0;
-		*job = work.job;
-	}
-
-	return ret;
-}
-#endif
 

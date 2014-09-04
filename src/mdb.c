@@ -30,6 +30,7 @@ enum {
 	MDB_SQL_TRUNCATE,	/* 10 */
 	MDB_SQL_UTIME,
 	MDB_SQL_READDIR,
+	MDB_SQL_GETLOCATION,
 	MDB_SQL_FINDPATH,
 
 	N_MDB_SQLS
@@ -77,6 +78,9 @@ static const char *mdb_sqls[N_MDB_SQLS] = {
 	/** 12. MDB_SQL_READDIR */
 	/** limit <skip>,<count> */
 	"select e_ino,name from anfs_dirent where d_ino=? limit ?,?",
+
+	/** 13. MDB_SQL_GETLOCATION */
+	"select stloc from anfs_inode where id=?",
 
 	"SELECT d_ino,name FROM anfs_dirent WHERE e_ino=? LIMIT 1",
 };
@@ -503,7 +507,6 @@ int anfs_mdb_getattr(struct anfs_mdb *self, const char *path,
 	return get_inode_attr(self, ino, buf);
 }
 
-/** TODO: implement!! */
 int anfs_mdb_get_ino_loc(struct anfs_mdb *self, const char *path,
 			uint64_t *ino, int *loc)
 {
@@ -984,6 +987,35 @@ int anfs_mdb_replication_available(struct anfs_mdb *self, uint64_t ino,
 int anfs_mdb_invalidate_replica(struct anfs_mdb *self, uint64_t ino)
 {
 	return 0;
+}
+
+int anfs_mdb_get_file_location(struct anfs_mdb *self, uint64_t ino,
+				int *index)
+{
+	int ret;
+	sqlite3_stmt *stmt;
+
+	stmt = stmt_get(self, MDB_SQL_GETLOCATION);
+	ret = sqlite3_bind_int64(stmt, 1, ino);
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+
+	do {
+		ret = sqlite3_step(stmt);
+	} while (ret == SQLITE_BUSY);
+
+	if (ret != SQLITE_ROW) {
+		ret = ret == SQLITE_DONE ? -ENOENT : -EIO;
+		goto out;
+	}
+
+	*index = sqlite3_column_int64(stmt, 0);
+
+out:
+	sqlite3_reset(stmt);
+	return ret;
 }
 
 int anfs_mdb_init(struct anfs_mdb *self, const char *dbfile)

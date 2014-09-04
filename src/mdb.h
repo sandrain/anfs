@@ -27,8 +27,6 @@ struct anfs_mdb {
 	char sqlbuf[2048];
 };
 
-#define	ANFS_NAMELEN	256
-
 struct anfs_dirent {
 	uint64_t d_ino;
 	char d_name[ANFS_NAMELEN];

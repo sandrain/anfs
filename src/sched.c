@@ -19,16 +19,14 @@ typedef	int (*anfs_sched_func_t) (struct anfs_ctx *, struct anfs_job *);
  * pathdb handling helpers
  */
 
-static const uint64_t AFS_OBJECT_OFFSET = 0x10000;
-
 static inline int pathdb_insert(struct anfs_ctx *ctx, uint64_t ino)
 {
 	char path[2048];	/* should be enough for now */
 	int ret = anfs_mdb_get_full_path(anfs_mdb(ctx), ino, path);
 
 	return anfs_pathdb_insert(anfs_pathdb(ctx),
-			(uint64_t) 0x22222, ino + AFS_OBJECT_OFFSET,
-			path);
+			anfs_config(ctx)->partition,
+			ino + ANFS_OBJECT_OFFSET, path);
 }
 
 static inline int pathdb_update(struct anfs_ctx *ctx, uint64_t ino)
@@ -37,14 +35,15 @@ static inline int pathdb_update(struct anfs_ctx *ctx, uint64_t ino)
 	int ret = anfs_mdb_get_full_path(anfs_mdb(ctx), ino, path);
 
 	return anfs_pathdb_update(anfs_pathdb(ctx),
-			(uint64_t) 0x22222, ino + AFS_OBJECT_OFFSET,
-			path);
+			anfs_config(ctx)->partition,
+			ino + ANFS_OBJECT_OFFSET, path);
 }
 
 static inline int pathdb_remove(struct anfs_ctx *ctx, uint64_t ino)
 {
 	return anfs_pathdb_remove(anfs_pathdb(ctx),
-			(uint64_t) 0x22222, ino + AFS_OBJECT_OFFSET);
+			anfs_config(ctx)->partition,
+			ino + ANFS_OBJECT_OFFSET);
 }
 
 /**
@@ -162,48 +161,17 @@ static int anfs_sched_input(struct anfs_ctx *afs, struct anfs_job *job);
  *
  * returns inode # if found, 0 otherwise.
  */
-
-#if 0
-static inline uint64_t find_inode(struct anfs_ctx *afs, const char *path,
-				int *osd)
-{
-	uint64_t ino;
-	struct anfs_stripe sinfo;
-	int ret = anfs_mdb_find_inode_from_path(anfs_mdb(afs), path, &ino);
-
-	if (!osd)
-		return ret ? 0 : ino;
-
-	ret = anfs_mdb_get_stripe_info(anfs_mdb(afs), ino, &sinfo);
-	if (ret)
-		return 0;
-
-	osd = sinfo.stloc;
-	return ino;
-}
-#endif
-
 static uint64_t find_inode(struct anfs_ctx *afs, const char *path,
 			struct anfs_data_file *file)
 {
 	int ret;
 	uint64_t ino;
 	struct stat stbuf;
-#if 0
-	struct anfs_stripe sinfo;
 
-	ret = anfs_mdb_find_inode_from_path(anfs_mdb(afs), path, &stbuf);
-#endif
 	ret = anfs_mdb_getattr(anfs_mdb(afs), path, &stbuf);
 	if (!file)
 		return ret ? 0 : stbuf.st_ino;
 	ino = stbuf.st_ino;
-
-#if 0
-	ret = anfs_mdb_get_stripe_info(anfs_mdb(afs), ino, &sinfo);
-	if (ret)
-		return 0;
-#endif
 
 	file->ino = ino;
 	file->osd = stbuf.st_blksize == 4096 ?
@@ -307,9 +275,9 @@ anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n",
 		t->osd, anfs_llu(t->tid), status);
 
 	if (status)
-		t->status = AFS_SCHED_TASK_ABORT;
+		t->status = ANFS_SCHED_TASK_ABORT;
 	else {
-		t->status = AFS_SCHED_TASK_COMPLETE;
+		t->status = ANFS_SCHED_TASK_COMPLETE;
 
 		/** 
 		 * handling output files:
@@ -323,13 +291,14 @@ anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n",
 			struct anfs_ctx *afs = (struct anfs_ctx *) r->priv;
 			struct anfs_data_file *file = t->output->files[i];
 
-			ret = anfs_osd_get_file_size(anfs_osd(afs), r->dev,
-						0x22222, file->ino, &size);
+			ret = anfs_osd_get_object_size(anfs_osd(afs), r->dev,
+						r->partition, file->ino,
+						&size);
 			if (ret) {
 				/** 
 				 * XXX: is this correct?
 				 */
-				t->status = AFS_SCHED_TASK_ABORT;
+				t->status = ANFS_SCHED_TASK_ABORT;
 				goto out;
 			}
 
@@ -343,7 +312,7 @@ anfs_task_log(t, "update output file metadata (ino=%llu, dev=%d, size=%llu)"
 		 anfs_llu(file->ino), t->osd, anfs_llu(size), ret);
 
 			if (ret) {
-				t->status = AFS_SCHED_TASK_ABORT;
+				t->status = ANFS_SCHED_TASK_ABORT;
 				goto out;
 			}
 
@@ -354,7 +323,7 @@ anfs_task_log(t, "invalidate replicas for output file (ino=%llu)"
 		", (ret = %d)\n", anfs_llu(file->ino), ret);
 
 			if (ret) {
-				t->status = AFS_SCHED_TASK_ABORT;
+				t->status = ANFS_SCHED_TASK_ABORT;
 				goto out;
 			}
 
@@ -407,7 +376,8 @@ static int fsm_request_task_execution(struct anfs_ctx *afs, struct anfs_task *t)
 	int ret;
 	struct anfs_osd_request *r;
 	uint32_t i;
-	//uint64_t *inobjs, *outobjs;
+	uint64_t partition = anfs_config(afs)->partition;
+	uint64_t *inobjs, *outobjs;
 	uint32_t n_ins = t->input->n_files;
 	uint32_t n_outs = t->output->n_files;
 	struct anfs_data_file *file;
@@ -417,7 +387,6 @@ static int fsm_request_task_execution(struct anfs_ctx *afs, struct anfs_task *t)
 	if (ret)
 		return ret;
 
-#if 0
 	/** associate objects to collections. */
 	inobjs = malloc(sizeof(*inobjs) * (n_ins + n_outs));
 	if (!inobjs)
@@ -435,19 +404,18 @@ static int fsm_request_task_execution(struct anfs_ctx *afs, struct anfs_task *t)
 		outobjs[i] = file->ino;
 	}
 
-	ret = anfs_osd_set_membership(anfs_osd(afs), t->osd, 0x22222,
+	ret = anfs_osd_set_membership(anfs_osd(afs), t->osd, partition,
 				t->input_cid, inobjs, n_ins);
 anfs_task_log(t, "membership set for input %d objects (ret=%d).\n",
 		t->input->n_files, ret);
 	if (ret)
 		goto out_free_olist;
-	ret = anfs_osd_set_membership(anfs_osd(afs), t->osd, 0x22222,
+	ret = anfs_osd_set_membership(anfs_osd(afs), t->osd, partition,
 				t->output_cid, outobjs, n_outs);
 anfs_task_log(t, "membership set for output %d objects (ret=%d).\n",
 		t->output->n_files, ret);
 	if (ret)
 		goto out_free_olist;
-#endif
 
 	/** prepare and submit request */
 	r = calloc(1, sizeof(*r));
@@ -456,7 +424,7 @@ anfs_task_log(t, "membership set for output %d objects (ret=%d).\n",
 		goto out_free_olist;
 	}
 
-	r->type = AFS_OSD_RQ_EXECUTE;
+	r->type = ANFS_OSD_RQ_EXECUTE;
 	r->dev = t->osd;
 	r->task = t;
 	r->priv = afs;
@@ -504,7 +472,7 @@ static void *sched_worker_preparer(void *arg)
 		list_for_each_entry(t, &job->task_list, list) {
 			ret = anfs_lineage_scan_reuse(afs, t);
 			t->status = ret ?
-				AFS_SCHED_TASK_SKIP : AFS_SCHED_TASK_INIT;
+				ANFS_SCHED_TASK_SKIP : ANFS_SCHED_TASK_INIT;
 
 			//ret = prepare_collections(afs, t);
 
@@ -584,7 +552,7 @@ anfs_task_log(t, "input %s is ready in osd %d.\n", input->files[i]->path,
 	return 1;
 }
 
-static void fsm_replication_callback(int status, struct anfs_filer_request *req)
+static void fsm_replication_callback(int status, struct anfs_copy_request *req)
 {
 	int ret;
 	struct anfs_ctx *ctx = (struct anfs_ctx *) req->priv;
@@ -592,7 +560,7 @@ static void fsm_replication_callback(int status, struct anfs_filer_request *req)
 	struct anfs_job *job = t->job;
 
 	if (status == 0) {
-		ret = anfs_mdb_add_replication(anfs_mdb(ctx), req->ino, req->destdev);
+		ret = anfs_mdb_add_replication(anfs_mdb(ctx), req->ino, req->dest);
 		if (ret) {
 			/** XXX: what a mess! what should we do? */
 anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!",
@@ -601,14 +569,13 @@ anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!",
 
 		t->t_transfer += req->t_complete - req->t_submit;
 		t->n_transfers += 1;
-		t->bytes_transfers += req->stripe->stat.st_size;
 	}
 
 	/** this field is continuously accessed/checked by the advancer */
 	pthread_mutex_lock(&t->stlock);
 	t->io_inflight--;
 	if (t->io_inflight <= 0)
-		req->task->status = AFS_SCHED_TASK_READY;
+		req->task->status = ANFS_SCHED_TASK_READY;
 	pthread_mutex_unlock(&t->stlock);
 
 anfs_task_log(t, "data transfer finished for ino %llu (status=%d), "
@@ -626,22 +593,17 @@ anfs_task_log(t, "data transfer finished for ino %llu (status=%d), "
  * negatives on errors.
  */
 static int get_replication_request(struct anfs_ctx *afs, uint64_t oid, int tdev,
-				int *dev_out, struct anfs_filer_request **out_req)
+				int *dev_out, struct anfs_copy_request **out_req)
 {
 	int ret = 0;
 	int dev;
+	uint64_t ino = anfs_o2i(oid);
 	struct anfs_mdb *db = anfs_mdb(afs);
-	struct anfs_stripe sinfo, *sp;
-	struct anfs_filer_request *req = NULL;
+	struct anfs_copy_request *req = NULL;
 
-	ret = anfs_mdb_get_stripe_info(db, oid, &sinfo);
+	ret = anfs_mdb_get_file_location(anfs_mdb(afs), ino, &dev);
 	if (ret)
 		return -EINVAL;
-
-	if (sinfo.stloc < 0)
-		dev = oid % anfs_osd(afs)->ndev;
-	else
-		dev = sinfo.stloc;
 
 	if (dev == tdev)
 		return 0;		/** replication avail */
@@ -652,19 +614,16 @@ static int get_replication_request(struct anfs_ctx *afs, uint64_t oid, int tdev,
 	else if (ret > 0)
 		return 0;		/** replication avail */
 
-	req = calloc(1, sizeof(*req) + sizeof(*sp));
+	req = calloc(1, sizeof(*req));
 	if (!req)
 		return -ENOMEM;
 
-	sp = (struct anfs_stripe *) &req[1];
-	*sp = sinfo;
-
-	req->ino = oid;
-	req->destdev = tdev;
-	req->stripe = sp;
+	req->ino = ino;
+	req->src = dev;
+	req->dest = tdev;
+	req->callback = &fsm_replication_callback;
 	req->priv = afs;
 	/** req->task should be set by caller */
-	req->callback = &fsm_replication_callback;
 
 	if (dev_out)
 		*dev_out = dev;
@@ -880,14 +839,14 @@ static inline void fsm_schedule_input_lazy(struct anfs_ctx *afs,
 {
 	int policy = t->job->sched;
 
-	if (policy == AFS_SCHED_POLICY_RR)
+	if (policy == ANFS_SCHED_POLICY_RR)
 		return;
 
 	switch (policy) {
-		case AFS_SCHED_POLICY_INPUT:
+		case ANFS_SCHED_POLICY_INPUT:
 			t->osd = sched_input_assign_osd(afs, t);
 			break;
-		case AFS_SCHED_POLICY_MINWAIT:
+		case ANFS_SCHED_POLICY_MINWAIT:
 			t->osd = sched_minwait_assign_osd(afs, t);
 			break;
 		default:
@@ -910,7 +869,7 @@ static int fsm_request_data_transfer(struct anfs_ctx *afs, struct anfs_task *t)
 	int dev, target_dev = t->osd;
 	struct anfs_task_data *td;
 	struct anfs_data_file *f;
-	struct anfs_filer_request *req;
+	struct anfs_copy_request *req;
 	struct anfs_job *job = t->job;
 
 	/**
@@ -922,16 +881,11 @@ static int fsm_request_data_transfer(struct anfs_ctx *afs, struct anfs_task *t)
 
 	if (ret == 1) {
 		req->task = t;
-		ret = anfs_filer_handle_replication(afs, req);
+		anfs_store_request_copy(anfs_store(afs), req);
+		count++;
 
 anfs_task_log(t, "request data transfer(ino: %llu, from osd %d to %d) ret=%d\n",
 		anfs_llu(req->ino), dev, target_dev, ret);
-
-		if (ret < 0) {
-			free(req);
-			return ret;
-		}
-		count++;
 	}
 
 	/**
@@ -946,16 +900,11 @@ anfs_task_log(t, "request data transfer(ino: %llu, from osd %d to %d) ret=%d\n",
 			return ret;
 		else if (ret == 1) {
 			req->task = t;
-			ret = anfs_filer_handle_replication(afs, req);
+			anfs_store_request_copy(anfs_store(afs), req);
+			count++;
 
 anfs_task_log(t, "request data transfer(ino: %llu, from osd %d to %d) ret=%d\n",
 		anfs_llu(req->ino), dev, target_dev, ret);
-
-			if (ret < 0) {
-				free(req);
-				return ret;
-			}
-			count++;
 		}
 	}
 
@@ -998,13 +947,13 @@ static inline void fsm_abandon_job(struct anfs_task *t)
 {
 	struct anfs_job *job = t->job;
 
-	if (job->status == AFS_SCHED_TASK_ABANDONED)
+	if (job->status == ANFS_SCHED_TASK_ABANDONED)
 		return;
 
 anfs_job_log(job, "aborting the job due to the task (%s at %p) failure..\n",
 		t->name, t);
 
-	job->status = AFS_SCHED_TASK_ABANDONED;
+	job->status = ANFS_SCHED_TASK_ABANDONED;
 }
 
 static inline void report_job_statistics(struct anfs_job *job)
@@ -1070,8 +1019,8 @@ anfs_job_log(job, "job was not successful");
 
 /**
  * handles:
- * successful cases: AFS_SCHED_TASK_COMPLETE, AFS_SCHED_TASK_SKIP
- * failure cases: AFS_SCHED_TASK_ABORT, AFS_SCHED_TASK_ABANDONED
+ * successful cases: ANFS_SCHED_TASK_COMPLETE, ANFS_SCHED_TASK_SKIP
+ * failure cases: ANFS_SCHED_TASK_ABORT, ANFS_SCHED_TASK_ABANDONED
  *
  * update file metadata for output files accordingly. (done by the callback)
  * update lineage db.
@@ -1084,7 +1033,7 @@ static int fsm_handle_task_completion(struct anfs_ctx *afs, struct anfs_task *t)
 	struct anfs_job *job = t->job;
 	struct anfs_task *task;
 
-	if (t->status == AFS_SCHED_TASK_ABORT)
+	if (t->status == ANFS_SCHED_TASK_ABORT)
 		fsm_abandon_job(t);
 
 	fsm_qtask(t, Q_COMPLETE);
@@ -1146,14 +1095,14 @@ static void *sched_worker_advancer(void *arg)
 			 * first, check the job has been abandoned. the task
 			 * should be abandoned as well.
 			 */
-			if (t->job->status == AFS_SCHED_TASK_ABANDONED)
-				t->status = AFS_SCHED_TASK_ABANDONED;
+			if (t->job->status == ANFS_SCHED_TASK_ABANDONED)
+				t->status = ANFS_SCHED_TASK_ABANDONED;
 
 			switch (t->status) {
-			case AFS_SCHED_TASK_INIT:
-			case AFS_SCHED_TASK_BLOCKED:
+			case ANFS_SCHED_TASK_INIT:
+			case ANFS_SCHED_TASK_BLOCKED:
 				if (fsm_task_input_produced(t)) {
-					t->status = AFS_SCHED_TASK_AVAIL;
+					t->status = ANFS_SCHED_TASK_AVAIL;
 anfs_task_log(t, "all input files are available.\n");
 				}
 				else {
@@ -1162,14 +1111,12 @@ anfs_task_log(t, "all input files are available.\n");
 				}
 				break;
 
-			case AFS_SCHED_TASK_AVAIL:
+			case ANFS_SCHED_TASK_AVAIL:
 				fsm_schedule_input_lazy(afs, t);
 				ret = fsm_request_data_transfer(afs, t);
 				if (ret > 0) {
-					//pthread_mutex_lock(&t->stlock);
 					t->io_inflight += ret;
-					t->status = AFS_SCHED_TASK_WAITIO;
-					//pthread_mutex_unlock(&t->stlock);
+					t->status = ANFS_SCHED_TASK_WAITIO;
 anfs_task_log(t, "%d data transfers are requested.\n", ret);
 				}
 				else if (ret < 0) {
@@ -1178,17 +1125,17 @@ anfs_task_log(t, "%d data transfers are requested.\n", ret);
 anfs_task_log(t, "data transfers request failed(%d).\n", ret);
 				}
 				else {
-					t->status = AFS_SCHED_TASK_READY;
+					t->status = ANFS_SCHED_TASK_READY;
 anfs_task_log(t, "no more transfer needed, task is ready to submit.\n");
 				}
 				break;
 
-			case AFS_SCHED_TASK_WAITIO:
+			case ANFS_SCHED_TASK_WAITIO:
 				fsm_qtask(t, Q_WAITING);
 				exit = 1;
 				break;
 
-			case AFS_SCHED_TASK_READY:
+			case ANFS_SCHED_TASK_READY:
 				/**
 				 * putting into q should come first,
 				 * considering super-fast or failing tasks:
@@ -1206,31 +1153,16 @@ anfs_task_log(t, "task submitted to osd %d (ret = %d)\n", t->osd, ret);
 				exit = 1;
 				break;
 
-			case AFS_SCHED_TASK_SKIP:
-			case AFS_SCHED_TASK_COMPLETE:
-			case AFS_SCHED_TASK_ABORT:
-			case AFS_SCHED_TASK_ABANDONED:
+			case ANFS_SCHED_TASK_SKIP:
+			case ANFS_SCHED_TASK_COMPLETE:
+			case ANFS_SCHED_TASK_ABORT:
+			case ANFS_SCHED_TASK_ABANDONED:
 				ret = fsm_handle_task_completion(afs, t);
 				exit = 1;
 				break;
-
-#if 0
-			case AFS_SCHED_TASK_SKIP:
-			case AFS_SCHED_TASK_COMPLETE:
-				ret = fsm_handle_task_completion(afs, t);
-				fsm_qtask(t, ret ? Q_WAITING : Q_COMPLETE);
-				exit = 1;
-				break;
-
-			case AFS_SCHED_TASK_ABORT:
-				fsm_handle_task_error(afs, t);
-				fsm_qtask(t, Q_COMPLETE);
-				exit = 1;
-				break;
-#endif
 
 			/** this should not be in a wait queue */
-			case AFS_SCHED_TASK_RUNNING:
+			case ANFS_SCHED_TASK_RUNNING:
 			default:
 				exit = 1;
 				break;
@@ -1265,7 +1197,7 @@ static int anfs_sched_rr(struct anfs_ctx *afs, struct anfs_job *job)
 
 	list_for_each_entry(t, &job->task_list, list) {
 		t->status = fsm_task_input_produced(t) ?
-				AFS_SCHED_TASK_AVAIL : AFS_SCHED_TASK_BLOCKED;
+				ANFS_SCHED_TASK_AVAIL : ANFS_SCHED_TASK_BLOCKED;
 
 		if (t->affinity >= 0 && t->affinity < ndev)
 			t->osd = t->affinity;
@@ -1287,14 +1219,14 @@ static int anfs_sched_input(struct anfs_ctx *afs, struct anfs_job *job)
 
 	list_for_each_entry(t, &job->task_list, list) {
 		t->status = fsm_task_input_produced(t) ?
-				AFS_SCHED_TASK_AVAIL : AFS_SCHED_TASK_BLOCKED;
+				ANFS_SCHED_TASK_AVAIL : ANFS_SCHED_TASK_BLOCKED;
 
 		if (t->affinity >= 0 && t->affinity < anfs_osd(afs)->ndev) {
 			t->osd = t->affinity;
 anfs_task_log(t, "scheduled to osd %d (user affinity).\n", t->osd);
 		}
 		else {
-			t->osd = AFS_SCHED_BIND_LAZY;
+			t->osd = ANFS_SCHED_BIND_LAZY;
 anfs_task_log(t, "lazy scheduled, will assign osd later.\n");
 		}
 	}
@@ -1343,8 +1275,8 @@ int anfs_sched_init(struct anfs_sched *self)
 	afs = anfs_ctx(self, sched);
 
 	self->policy = anfs_config(afs)->sched_policy;
-	if (self->policy >= AFS_SCHED_N_POLICIES) {
-		self->policy = AFS_SCHED_POLICY_RR;
+	if (self->policy >= ANFS_SCHED_N_POLICIES) {
+		self->policy = ANFS_SCHED_POLICY_RR;
 
 		/** warn this */
 	}

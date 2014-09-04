@@ -47,6 +47,8 @@ int anfs_config_init(struct anfs_config *self, const char *cfile)
 	if (!fp)
 		return -errno;
 
+	memset(self, 0, sizeof(*self));
+
 	while (fgets(linebuf, CFGLBUFSZ-1, fp) != NULL) {
 		if (linebuf[0] == '#' || strempty(linebuf))
 			continue;
@@ -71,17 +73,23 @@ int anfs_config_init(struct anfs_config *self, const char *cfile)
 			param = get_param_str(current);
 			self->update_atime = atoi(param) == 0 ? 0 : 1;
 		}
-		else if (strncmp(current, "worker_idle_sleep",
-					strlen("worker_idle_sleep")) == 0)
-		{
-			param = get_param_str(current);
-			self->worker_idle_sleep = strtol(param, NULL, 0);
-		}
 		else if (strncmp(current, "sched_policy",
 					strlen("sched_policy")) == 0)
 		{
 			param = get_param_str(current);
 			self->sched_policy = read_sched_policy(param);
+		}
+		else if (strncmp(current, "partition",
+					strlen("partition")) == 0)
+		{
+			param = get_param_str(current);
+			self->partition = strtol(param, NULL, 0);
+		}
+		else if (strncmp(current, "worker_idle_sleep",
+					strlen("worker_idle_sleep")) == 0)
+		{
+			param = get_param_str(current);
+			self->worker_idle_sleep = strtol(param, NULL, 0);
 		}
 		else if (strncmp(current, "pathdb_path",
 					strlen("pathdb_path")) == 0)
@@ -103,6 +111,12 @@ int anfs_config_init(struct anfs_config *self, const char *cfile)
 		ret = -EINVAL;
 		goto out_close;
 	}
+
+	/** setup default values */
+	if (!self->partition)
+		self->partition = ANFS_DEFAULT_PARTITION;
+	if (!self->worker_idle_sleep)
+		self->worker_idle_sleep = 500;
 
 	self->configfile = strdup(cfile);
 

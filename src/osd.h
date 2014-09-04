@@ -57,6 +57,7 @@ struct anfs_osd_request {
 	int dev;		/* device processed the request */
 	uint64_t ino;		/* inode # or collection id */
 	uint64_t cid;
+	uint64_t partition;	/* partition id in osd */
 
 	struct anfs_task *task;	/* task for execute request */
 
@@ -90,6 +91,7 @@ struct anfs_osd_worker {
 };
 
 struct anfs_osd {
+	uint64_t partition;			/* partition id */
 	int ndev;
 	char **devpaths;
 	struct anfs_osd_worker *workers;	/* dev request handlers */
@@ -139,6 +141,9 @@ int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 
 int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t cid, uint64_t *objs, uint32_t len);
+
+int anfs_osd_get_object_size(struct anfs_osd *self, int dev, uint64_t pid,
+				uint64_t oid, uint64_t *size);
 
 #endif	/** __ANFS_OSD_H__ */
 

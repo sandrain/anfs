@@ -16,8 +16,6 @@
 
 #include "anfs.h"
 
-static const uint64_t AFS_OBJECT_OFFSET = 0x10000;
-
 static void osdblk_make_credential(u8 *creds, struct osd_obj_id *obj,
 				   bool is_v1)
 {
@@ -101,12 +99,12 @@ static int osd_execute_object_osdlib(struct osd_dev *osd,
 	struct anfs_task *task = req->task;
 	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
 	u32 len = task->argument ? strlen(task->argument) : 0;
-	u64 input = task->input_cid + AFS_OBJECT_OFFSET;
-	u64 output = task->output_cid + AFS_OBJECT_OFFSET;
+	u64 input = task->input_cid + ANFS_OBJECT_OFFSET;
+	u64 output = task->output_cid + ANFS_OBJECT_OFFSET;
 	char *param_str = task->argument;
 	struct osd_obj_id obj = {
-		.partition = 0x22222,
-		.id = task->koid + AFS_OBJECT_OFFSET
+		.partition = req->partition,
+		.id = task->koid + ANFS_OBJECT_OFFSET
 	};
 	uint64_t tid;
 
@@ -426,6 +424,7 @@ int anfs_osd_init(struct anfs_osd *self, int ndev, char **devpaths,
 {
 	int i, ret = 0;
 	struct anfs_osd_worker *current, *workers;
+	struct anfs_ctx *ctx = anfs_ctx(self, osd);
 
 	if (ndev <= 0)
 		return -EINVAL;
@@ -434,6 +433,7 @@ int anfs_osd_init(struct anfs_osd *self, int ndev, char **devpaths,
 	if (!workers)
 		return -ENOMEM;
 
+	self->partition = anfs_config(ctx)->partition;
 	self->ndev = ndev;
 	self->devpaths = calloc(ndev, sizeof(char *));
 	if (!self->devpaths) {
@@ -535,6 +535,7 @@ int anfs_osd_submit_request(struct anfs_osd *self,
 
 	req->t_submit = anfs_now();
 	req->osd = worker->osd;
+	req->partition = self->partition;
 
 	lock_rq(worker);
 	list_add_tail(&req->list, &worker->rq);
@@ -565,7 +566,7 @@ int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 	}
 
 	if (*cid)
-		obj.id = *cid + AFS_OBJECT_OFFSET;
+		obj.id = *cid + ANFS_OBJECT_OFFSET;
 
 	osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
 	osd_req_create_collection(or, &obj);
@@ -600,7 +601,7 @@ int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 	int i, ret = 0;
 	u8 creds[OSD_CAP_LEN];
 	struct osd_obj_id obj;
-	__be64 be_cid = cpu_to_be64(cid + AFS_OBJECT_OFFSET);
+	__be64 be_cid = cpu_to_be64(cid + ANFS_OBJECT_OFFSET);
 	struct osd_request *or;
 	struct osd_dev *osd = self->workers[dev].osd;
 	struct osd_attr membership = ATTR_SET(OSD_APAGE_OBJECT_COLLECTIONS, 1,
@@ -612,7 +613,7 @@ int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 		if (unlikely(!or))
 			return -ENOMEM;
 
-		obj.id = objs[i] + AFS_OBJECT_OFFSET;
+		obj.id = objs[i] + ANFS_OBJECT_OFFSET;
 
 		osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
 
@@ -625,6 +626,43 @@ int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 		if (ret)
 			break;
 	}
+
+	return ret;
+}
+
+const struct osd_attr g_attr_logical_length = ATTR_DEF(
+		OSD_APAGE_OBJECT_INFORMATION, OSD_ATTR_OI_LOGICAL_LENGTH, 8);
+
+int anfs_osd_get_object_size(struct anfs_osd *self, int dev, uint64_t pid,
+				uint64_t oid, uint64_t *size)
+{
+	int ret = 0;
+	u8 creds[OSD_CAP_LEN];
+	struct osd_dev *osd = self->workers[dev].osd;
+	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
+	struct osd_obj_id obj = {
+		.partition = pid,
+		.id = oid + ANFS_OBJECT_OFFSET
+	};
+	int nelem = 1;
+	void *iter = NULL;
+	struct osd_attr attr;
+
+	if (unlikely(!or))
+		return -ENOMEM;
+
+	osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
+	osd_req_get_attributes(or, &obj);
+	osd_req_add_get_attr_list(or, &g_attr_logical_length, 1);
+
+	ret = osdblk_exec(or, creds);
+
+	if (!ret) {
+		osd_req_decode_get_attr_list(or, &attr, &nelem, &iter);
+		*size = get_unaligned_be64(attr.val_ptr);
+	}
+
+	osd_end_request(or);
 
 	return ret;
 }

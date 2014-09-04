@@ -347,20 +347,16 @@ static void *anfs_init(struct fuse_conn_info *conn)
 			anfs_config(self)->worker_idle_sleep);
 	if (ret)
 		goto out_err;
-#if 0
 	ret = anfs_sched_init(anfs_sched(self));
 	if (ret)
 		goto out_err;
-#endif
 	ret = anfs_store_init(anfs_store(self), ndev, devs);
 	if (ret)
 		goto out_err;
-#if 0
 	ret = anfs_pathdb_init(anfs_pathdb(self),
 				anfs_config(self)->pathdb_path);
 	if (ret)
 		goto out_err;
-#endif
 
 	free(devstr);
 	return self;
@@ -373,13 +369,9 @@ static void anfs_destroy(void *context)
 {
 	struct anfs_ctx *self = anfs_fuse_ctx;
 
-#if 0
 	anfs_pathdb_exit(anfs_pathdb(self));
-#endif
 	anfs_store_exit(anfs_store(self));
-#if 0
 	anfs_sched_exit(anfs_sched(self));
-#endif
 	anfs_osd_exit(anfs_osd(self));
 	anfs_mdb_exit(anfs_mdb(self));
 	anfs_config_exit(anfs_config(self));
