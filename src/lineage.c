@@ -4,33 +4,33 @@
  * ---------------------------------------------------------------------------
  * lineage manager implementation.
  */
-#include "activefs.h"
+#include "anfs.h"
 
 /**
  * external interface
  */
 
-int afs_lineage_scan_reuse(struct afs_ctx *afs, struct afs_task *task)
+#if 0
+int anfs_lineage_scan_reuse(struct anfs_ctx *afs, struct anfs_task *task)
 {
-
-
 	return 0;
 }
 
-int afs_lineage_process_read(struct afs_ctx *ctx,
-				struct afs_filer_request *req)
+int anfs_lineage_process_read(struct anfs_ctx *ctx,
+				struct anfs_filer_request *req)
 {
 	return ENOSYS;
 }
 
-int afs_lineage_process_write(struct afs_ctx *ctx,
-				struct afs_filer_request *req)
+int anfs_lineage_process_write(struct anfs_ctx *ctx,
+				struct anfs_filer_request *req)
 {
 	return ENOSYS;
 }
 
-int afs_lineage_record_job_execution(struct afs_ctx *ctx, struct afs_job *job)
+int anfs_lineage_record_job_execution(struct anfs_ctx *ctx, struct anfs_job *job)
 {
 	return 0;
 }
+#endif
 

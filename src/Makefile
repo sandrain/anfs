@@ -19,10 +19,11 @@ CFLAGS += $(shell pkg-config --cflags fuse)
 CFLAGS += $(shell pkg-config --cflags sqlite3)
 CFLAGS += $(shell pkg-config --cflags libconfig)
 
-SRC := activefs.c config.c filer.c db.c osd.c sched.c util.c virtio.c \
-	parser.c lineage.c pathdb-host.c
-INC := activefs.h activefs-priv.h config.h db.h filer.h list.h osd.h sched.h \
-	util.h virtio.h parser.h lineage.h pathdb-host.h
+SRC := anfs.c config.c mdb.c util.c lineage.c \
+	pathdb-host.c
+INC := anfs.h config.h mdb.h list.h util.h \
+	lineage.h pathdb-host.h
+
 OBJ := $(SRC:.c=.o)
 LIB := $(shell pkg-config --libs sqlite3)
 LIB += $(shell pkg-config --libs fuse)
@@ -30,7 +31,7 @@ LIB += $(shell pkg-config --libs libconfig)
 LIB += -L../../activeosd/open-osd/lib -losd
 
 DEPEND = .dependencies
-TARGETS = mkactivefs activefs
+TARGETS = mkactivefs anfs
 PATHDB = /ccs/techint/home/hs2/afs_eval/pathdb.db
 
 all: $(DEPEND) $(TARGETS)
@@ -39,33 +40,32 @@ all: $(DEPEND) $(TARGETS)
 
 
 ## activefs
-activefs: $(OBJ)
+anfs: $(OBJ)
 	$(CC) -o $@ $^ $(LIB) $(CFLAGS)
 
 %.o: %.c Makefile $(INC)
-	$(CC) $(CFLAGS) -c $< -o $@ $(@:.o=.c)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(DEPEND): $(OBJ:.o=.c)
 	$(CC) -MM $(CFLAGS) $^ > $@
 
 ## mkactivefs
-mkactivefs: mkactivefs.o afs-schema.o
-	$(CC) $(CFLAGS) $(shell pkg-config --cflags --libs sqlite3) \
-		$(LIB) -o $@ $^
+mkactivefs: mkactivefs.o anfs-schema.o
+	$(CC) $(CFLAGS) $(LIB) -o $@ $^
 
 mkactivefs.o: mkactivefs.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-afs-schema.o: afs-schema.c
+anfs-schema.o: anfs-schema.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-afs-schema.c: db.schema.sql
+anfs-schema.c: db.schema.sql
 	@( echo "const char *create_sql =";\
 	   sed 's/^/"/; s/$$/\\n"/' < $< ;\
 	   echo ";" ) > $@
 
 clean:
-	rm -f *.o $(DEPEND) $(TARGETS) afs-schema.c
+	rm -f *.o $(DEPEND) $(TARGETS) anfs-schema.c
 
 ## pathdb.db
 $(PATHDB): pathdb.schema.sql

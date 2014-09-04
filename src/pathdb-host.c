@@ -18,17 +18,17 @@ enum {
 };
 
 static const char *sqls[] = {
-	"INSERT INTO afs_nspath (pid, oid, nspath, runtime) VALUES (?,?,?,?)",
-	"UPDATE afs_nspath SET nspath=? WHERE pid=? AND oid=?",
-	"DELETE FROM afs_nspath WHERE pid=? AND oid=?"
+	"INSERT INTO anfs_nspath (pid, oid, nspath, runtime) VALUES (?,?,?,?)",
+	"UPDATE anfs_nspath SET nspath=? WHERE pid=? AND oid=?",
+	"DELETE FROM anfs_nspath WHERE pid=? AND oid=?"
 };
 
-static inline sqlite3_stmt *stmt_get(struct afs_pathdb *self, int index)
+static inline sqlite3_stmt *stmt_get(struct anfs_pathdb *self, int index)
 {
 	return self->stmts[index];
 }
 
-int afs_pathdb_init(struct afs_pathdb *self, const char *dbfile)
+int anfs_pathdb_init(struct anfs_pathdb *self, const char *dbfile)
 {
 	int i, ret;
 	sqlite3_stmt **stmts = NULL;
@@ -70,7 +70,7 @@ out:
 	return ret;
 }
 
-int afs_pathdb_exit(struct afs_pathdb *self)
+int anfs_pathdb_exit(struct anfs_pathdb *self)
 {
 	int ret = 0;
 
@@ -125,7 +125,7 @@ static inline uint64_t get_kernel_runtime(const char *path)
 		return 0;
 }
 
-int afs_pathdb_insert(struct afs_pathdb *self, uint64_t pid, uint64_t oid,
+int anfs_pathdb_insert(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
 			const char *nspath)
 {
 	int ret;
@@ -157,7 +157,7 @@ out:
 	return ret;
 }
 
-int afs_pathdb_remove(struct afs_pathdb *self, uint64_t pid, uint64_t oid)
+int anfs_pathdb_remove(struct anfs_pathdb *self, uint64_t pid, uint64_t oid)
 {
 	int ret;
 	sqlite3_stmt *stmt;
@@ -183,7 +183,7 @@ out:
 	return ret;
 }
 
-int afs_pathdb_update(struct afs_pathdb *self, uint64_t pid, uint64_t oid,
+int anfs_pathdb_update(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
 			const char *nspath)
 {
 	int ret;

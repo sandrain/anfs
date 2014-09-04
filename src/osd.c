@@ -12,9 +12,9 @@
 #include <arpa/inet.h>
 #include <endian.h>
 #include <pthread.h>
-#include <open-osd/libosd.h>
+//#include <open-osd/libosd.h>
 
-#include "activefs.h"
+#include "anfs.h"
 
 static const uint64_t AFS_OBJECT_OFFSET = 0x10000;
 
@@ -93,7 +93,7 @@ out:
 	return ret;
 }
 
-static int osd_create_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid)
+static int osd_create_object_osdlib(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	int ret = 0;
 	u8 creds[OSD_CAP_LEN];
@@ -113,7 +113,7 @@ static int osd_create_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid)
 	return ret;
 }
 
-static int osd_remove_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid)
+static int osd_remove_object_osdlib(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	int ret = 0;
 	u8 creds[OSD_CAP_LEN];
@@ -132,7 +132,7 @@ static int osd_remove_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid)
 	return ret;
 }
 
-static int osd_write_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid,
+static int osd_write_object_osdlib(struct anfs_osd_dev *aosd, uint64_t oid,
 				const void *data, size_t count, off_t offset)
 {
 	int ret;
@@ -152,7 +152,7 @@ static int osd_write_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid,
 	return ret;
 }
 
-static int osd_read_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid,
+static int osd_read_object_osdlib(struct anfs_osd_dev *aosd, uint64_t oid,
 				void *data, size_t count, off_t offset)
 {
 	int ret;
@@ -172,17 +172,17 @@ static int osd_read_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid,
 	return ret;
 }
 
-static int osd_dsync_object_osdlib(struct afs_osd_dev *aosd, uint64_t oid)
+static int osd_dsync_object_osdlib(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	return 0;
 }
 
-static int osd_execute_object_osdlib(struct afs_osd_dev *aosd,
-				struct afs_osd_request *req)
+static int osd_execute_object_osdlib(struct anfs_osd_dev *aosd,
+				struct anfs_osd_request *req)
 {
 	int ret;
 	u8 creds[OSD_CAP_LEN];
-	struct afs_task *task = req->task;
+	struct anfs_task *task = req->task;
 	struct osd_request *or = osd_start_request(aosd->osd, GFP_KERNEL);
 	u32 len = task->argument ? strlen(task->argument) : 0;
 	u64 input = task->input_cid + AFS_OBJECT_OFFSET;
@@ -214,14 +214,14 @@ static int osd_execute_object_osdlib(struct afs_osd_dev *aosd,
 	return ret;
 }
 
-static int osd_query_task_osdlib(struct afs_osd_dev *aosd,
-				struct afs_osd_request *req,
+static int osd_query_task_osdlib(struct anfs_osd_dev *aosd,
+				struct anfs_osd_request *req,
 				struct osd_active_task_status *st)
 {
 	int ret;
 	u8 creds[OSD_CAP_LEN];
 	struct osd_request *or = osd_start_request(aosd->osd, GFP_KERNEL);
-	struct afs_task *task = req->task;
+	struct anfs_task *task = req->task;
 	struct osd_obj_id obj = {
 		.partition = 0,
 		.id = task->tid
@@ -252,7 +252,7 @@ static int osd_query_task_osdlib(struct afs_osd_dev *aosd,
 	return ret;
 }
 
-static int osd_create_collection_osdlib(struct afs_osd_dev *aosd,
+static int osd_create_collection_osdlib(struct anfs_osd_dev *aosd,
 					uint64_t pid, uint64_t *cid)
 {
 	int ret;
@@ -304,7 +304,7 @@ out:
 /**
  * do we really to need to submit a request for each object??
  */
-static int osd_set_membership_osdlib(struct afs_osd_dev *aosd, uint64_t pid,
+static int osd_set_membership_osdlib(struct anfs_osd_dev *aosd, uint64_t pid,
 				uint64_t cid, uint64_t *objs, uint32_t len)
 {
 	int i, ret = 0;
@@ -341,7 +341,7 @@ static int osd_set_membership_osdlib(struct afs_osd_dev *aosd, uint64_t pid,
 const struct osd_attr g_attr_logical_length = ATTR_DEF(
 		OSD_APAGE_OBJECT_INFORMATION, OSD_ATTR_OI_LOGICAL_LENGTH, 8);
 
-static int osd_get_object_size_osdlib(struct afs_osd_dev *aosd, uint64_t pid,
+static int osd_get_object_size_osdlib(struct anfs_osd_dev *aosd, uint64_t pid,
 				uint64_t oid, uint64_t *size)
 {
 	int ret = 0;
@@ -386,19 +386,19 @@ static int osd_get_object_size_osdlib(struct afs_osd_dev *aosd, uint64_t pid,
  * because we also allocate the object id for the collections.
  */
 
-static inline void get_exofs_path(struct afs_osd_dev *aosd,
+static inline void get_exofs_path(struct anfs_osd_dev *aosd,
 					uint64_t oid, char *buf)
 {
 	sprintf(buf, "%s/objects/%02x/%016llx.af",
-			aosd->mnt, (uint8_t) (oid & 0xffUL), afs_llu(oid));
+			aosd->mnt, (uint8_t) (oid & 0xffUL), anfs_llu(oid));
 }
 
-static inline void get_exofs_path_worker(struct afs_osd_dev *aosd, uint64_t oid)
+static inline void get_exofs_path_worker(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	get_exofs_path(aosd, oid, aosd->nbuf);
 }
 
-static int osd_create_object_exofs(struct afs_osd_dev *aosd, uint64_t oid)
+static int osd_create_object_exofs(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	int ret;
 
@@ -411,7 +411,7 @@ static int osd_create_object_exofs(struct afs_osd_dev *aosd, uint64_t oid)
 	return close(ret);
 }
 
-static int osd_remove_object_exofs(struct afs_osd_dev *aosd, uint64_t oid)
+static int osd_remove_object_exofs(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	get_exofs_path_worker(aosd, oid);
 
@@ -420,7 +420,7 @@ static int osd_remove_object_exofs(struct afs_osd_dev *aosd, uint64_t oid)
 
 /** XXX; is it find to use the buffered write here? */
 
-static int osd_write_object_exofs(struct afs_osd_dev *aosd, uint64_t oid,
+static int osd_write_object_exofs(struct anfs_osd_dev *aosd, uint64_t oid,
 				const void *data, size_t count, off_t offset)
 {
 	int ret;
@@ -455,7 +455,7 @@ out:
 	return ret;
 }
 
-static int osd_read_object_exofs(struct afs_osd_dev *aosd, uint64_t oid,
+static int osd_read_object_exofs(struct anfs_osd_dev *aosd, uint64_t oid,
 				void *data, size_t count, off_t offset)
 {
 	int ret;
@@ -492,7 +492,7 @@ out:
 	return ret;
 }
 
-static int osd_dsync_object_exofs(struct afs_osd_dev *aosd, uint64_t oid)
+static int osd_dsync_object_exofs(struct anfs_osd_dev *aosd, uint64_t oid)
 {
 	int ret = 0;
 	int fd;
@@ -514,7 +514,7 @@ out:
 /**
  * read the id from the /sys/fs/exofs/osdX/sync_id.
  */
-static uint64_t get_exofs_sync_id(struct afs_osd_dev *aosd, int dev)
+static uint64_t get_exofs_sync_id(struct anfs_osd_dev *aosd, int dev)
 {
 	FILE *fp;
 	char sync_path[32];
@@ -533,7 +533,7 @@ static uint64_t get_exofs_sync_id(struct afs_osd_dev *aosd, int dev)
 	return id;
 }
 
-static int osd_create_collection_exofs(struct afs_osd_dev *aosd, int dev,
+static int osd_create_collection_exofs(struct anfs_osd_dev *aosd, int dev,
 					uint64_t pid, uint64_t *cid)
 {
 	int ret;
@@ -565,13 +565,13 @@ static int osd_create_collection_exofs(struct afs_osd_dev *aosd, int dev,
 	return ret;
 }
 
-static int osd_execute_object_exofs(struct afs_osd_dev *aosd,
-				struct afs_osd_request *req)
+static int osd_execute_object_exofs(struct anfs_osd_dev *aosd,
+				struct anfs_osd_request *req)
 {
 	return -ENOSYS;
 }
 
-static int osd_get_object_size_exofs(struct afs_osd_dev *aosd, uint64_t pid,
+static int osd_get_object_size_exofs(struct anfs_osd_dev *aosd, uint64_t pid,
 				uint64_t oid, uint64_t *size)
 {
 	int ret;
@@ -591,7 +591,7 @@ static int osd_get_object_size_exofs(struct afs_osd_dev *aosd, uint64_t pid,
  * worker thread implementation.
  */
 
-static int terminate_workers(struct afs_osd *self)
+static int terminate_workers(struct anfs_osd *self)
 {
 	int i, ret;
 	void *res;
@@ -611,18 +611,18 @@ static int terminate_workers(struct afs_osd *self)
 	return ret;
 }
 
-static inline void lock_rq(struct afs_osd_worker *worker)
+static inline void lock_rq(struct anfs_osd_worker *worker)
 {
 	pthread_mutex_lock(&worker->lock);
 }
 
-static inline void unlock_rq(struct afs_osd_worker *worker)
+static inline void unlock_rq(struct anfs_osd_worker *worker)
 {
 	pthread_mutex_unlock(&worker->lock);
 }
 
-static inline int worker_create_object(struct afs_osd_worker *wd,
-				struct afs_osd_request *req)
+static inline int worker_create_object(struct anfs_osd_worker *wd,
+				struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_create_object_osdlib(&wd->osd, req->ino);
@@ -630,8 +630,8 @@ static inline int worker_create_object(struct afs_osd_worker *wd,
 		return osd_create_object_exofs(&wd->osd, req->ino);
 }
 
-static inline int worker_remove_object(struct afs_osd_worker *wd,
-				struct afs_osd_request *req)
+static inline int worker_remove_object(struct anfs_osd_worker *wd,
+				struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_remove_object_osdlib(&wd->osd, req->ino);
@@ -639,8 +639,8 @@ static inline int worker_remove_object(struct afs_osd_worker *wd,
 		return osd_remove_object_exofs(&wd->osd, req->ino);
 }
 
-static inline int worker_read_object(struct afs_osd_worker *wd,
-				struct afs_osd_request *req)
+static inline int worker_read_object(struct anfs_osd_worker *wd,
+				struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_read_object_osdlib(&wd->osd, req->ino, req->buf,
@@ -650,8 +650,8 @@ static inline int worker_read_object(struct afs_osd_worker *wd,
 						req->size, req->off);
 }
 
-static inline int worker_write_object(struct afs_osd_worker *wd,
-				struct afs_osd_request *req)
+static inline int worker_write_object(struct anfs_osd_worker *wd,
+				struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_write_object_osdlib(&wd->osd, req->ino, req->buf,
@@ -661,8 +661,8 @@ static inline int worker_write_object(struct afs_osd_worker *wd,
 						req->size, req->off);
 }
 
-static inline int worker_sync_object(struct afs_osd_worker *wd,
-				struct afs_osd_request *req)
+static inline int worker_sync_object(struct anfs_osd_worker *wd,
+				struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_dsync_object_osdlib(&wd->osd, req->ino);
@@ -670,20 +670,20 @@ static inline int worker_sync_object(struct afs_osd_worker *wd,
 		return osd_dsync_object_exofs(&wd->osd, req->ino);
 }
 
-static inline int worker_setattr_object(struct afs_osd_worker *wd,
-					struct afs_osd_request *req)
+static inline int worker_setattr_object(struct anfs_osd_worker *wd,
+					struct anfs_osd_request *req)
 {
 	return -1;
 }
 
-static inline int worker_getattr_object(struct afs_osd_worker *wd,
-					struct afs_osd_request *req)
+static inline int worker_getattr_object(struct anfs_osd_worker *wd,
+					struct anfs_osd_request *req)
 {
 	return -1;
 }
 
-static inline int worker_execute_object(struct afs_osd_worker *wd,
-					struct afs_osd_request *req)
+static inline int worker_execute_object(struct anfs_osd_worker *wd,
+					struct anfs_osd_request *req)
 {
 	int ret;
 
@@ -702,8 +702,8 @@ static inline int worker_execute_object(struct afs_osd_worker *wd,
 	return ret;
 }
 
-static inline int worker_create_collection(struct afs_osd_worker *wd,
-					struct afs_osd_request *req)
+static inline int worker_create_collection(struct anfs_osd_worker *wd,
+					struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_create_collection_osdlib(&wd->osd, req->ino,
@@ -712,8 +712,8 @@ static inline int worker_create_collection(struct afs_osd_worker *wd,
 		return -ENOSYS;
 }
 
-static inline int worker_set_membership(struct afs_osd_worker *wd,
-					struct afs_osd_request *req)
+static inline int worker_set_membership(struct anfs_osd_worker *wd,
+					struct anfs_osd_request *req)
 {
 	if (wd->direct)
 		return osd_set_membership_osdlib(&wd->osd, 0x22222, req->ino,
@@ -731,15 +731,15 @@ static inline int worker_set_membership(struct afs_osd_worker *wd,
  * returns a request fetched, if any. NULL otherwise.
  */
 static inline
-struct afs_osd_request *fetch_request(struct afs_osd_worker *wd)
+struct anfs_osd_request *fetch_request(struct anfs_osd_worker *wd)
 {
-	struct afs_osd_request *req = NULL;
+	struct anfs_osd_request *req = NULL;
 
 	lock_rq(wd);
 	if (list_empty(&wd->rq))
 		goto out;
 
-	req = list_first_entry(&wd->rq, struct afs_osd_request, list);
+	req = list_first_entry(&wd->rq, struct anfs_osd_request, list);
 	list_del(&req->list);
 
 out:
@@ -747,11 +747,11 @@ out:
 	return req;
 }
 
-static void *afs_osd_worker_func(void *arg)
+static void *anfs_osd_worker_func(void *arg)
 {
 	int ret = 0;
-	struct afs_osd_worker *data = (struct afs_osd_worker *) arg;
-	struct afs_osd_request *req;
+	struct anfs_osd_worker *data = (struct anfs_osd_worker *) arg;
+	struct anfs_osd_request *req;
 
 	while (1) {
 		req = fetch_request(data);
@@ -830,7 +830,7 @@ static void *afs_osd_worker_func(void *arg)
 		 */
 		if (req->type != AFS_OSD_RQ_EXECUTE) {
 			req->status = ret;
-			req->t_complete = afs_now();
+			req->t_complete = anfs_now();
 			if (req->callback)
 				(*req->callback) (ret, req);
 		}
@@ -851,7 +851,7 @@ static void *afs_osd_worker_func(void *arg)
  */
 #define	AFS_OSD_COPIER_BUFSIZE		(1<<20)
 static char copier_buffer[AFS_OSD_COPIER_BUFSIZE];
-static struct afs_osd_dev **copier_devs;
+static struct anfs_osd_dev **copier_devs;
 
 static int copier_replicate_object_osdlib(uint64_t ino, int src_dev, int dst_dev)
 {
@@ -1037,11 +1037,11 @@ out_err:
 	return ret;
 }
 
-static void *afs_osd_worker_copier(void *arg)
+static void *anfs_osd_worker_copier(void *arg)
 {
 	int ret = 0;
-	struct afs_osd_worker *data = (struct afs_osd_worker *) arg;
-	struct afs_osd_request *req;
+	struct anfs_osd_worker *data = (struct anfs_osd_worker *) arg;
+	struct anfs_osd_request *req;
 
 	while (1) {
 		req = fetch_request(data);
@@ -1067,7 +1067,7 @@ static void *afs_osd_worker_copier(void *arg)
 						req->dev, req->destdev);
 
 		req->status = ret;
-		req->t_complete = afs_now();
+		req->t_complete = anfs_now();
 		if (req->callback)
 			(*req->callback) (ret, req);
 	}
@@ -1075,14 +1075,14 @@ static void *afs_osd_worker_copier(void *arg)
 	return (void *) ((unsigned long) ret);
 }
 
-static void *afs_osd_worker_task_checker(void *arg)
+static void *anfs_osd_worker_task_checker(void *arg)
 {
 	int ret = 0;
-	struct afs_osd_worker *data = (struct afs_osd_worker *) arg;
-	struct afs_osd_request *req;
-	struct afs_task *task;
+	struct anfs_osd_worker *data = (struct anfs_osd_worker *) arg;
+	struct anfs_osd_request *req;
+	struct anfs_task *task;
 	struct osd_active_task_status status;
-	struct afs_osd_dev *aosd;
+	struct anfs_osd_dev *aosd;
 
 	while (1) {
 		req = fetch_request(data);
@@ -1107,7 +1107,7 @@ static void *afs_osd_worker_task_checker(void *arg)
 			task->t_start = status.start;
 			task->t_complete = status.complete;
 
-			req->t_complete = afs_now();
+			req->t_complete = anfs_now();
 
 			if (req->callback)
 				(*req->callback) (task->ret, req);
@@ -1154,11 +1154,11 @@ static void *afs_osd_worker_task_checker(void *arg)
  * external interface of osd component.
  */
 
-int afs_osd_init(struct afs_osd *self, int ndev, char **devpaths, int direct,
+int anfs_osd_init(struct anfs_osd *self, int ndev, char **devpaths, int direct,
 		uint64_t idle_sleep)
 {
 	int i, ret = 0;
-	struct afs_osd_worker *current, *workers;
+	struct anfs_osd_worker *current, *workers;
 
 	if (ndev <= 0)
 		return -EINVAL;
@@ -1203,7 +1203,7 @@ int afs_osd_init(struct afs_osd *self, int ndev, char **devpaths, int direct,
 		pthread_mutex_init(&current->lock, NULL);
 
 		INIT_LIST_HEAD(&current->rq);
-		ret = pthread_create(&current->id, NULL, &afs_osd_worker_func,
+		ret = pthread_create(&current->id, NULL, &anfs_osd_worker_func,
 				current);
 		if (ret) {
 			ret = -errno;
@@ -1222,7 +1222,7 @@ int afs_osd_init(struct afs_osd *self, int ndev, char **devpaths, int direct,
 	pthread_mutex_init(&current->lock, NULL);
 
 	INIT_LIST_HEAD(&current->rq);
-	ret = pthread_create(&current->id, NULL, &afs_osd_worker_copier,
+	ret = pthread_create(&current->id, NULL, &anfs_osd_worker_copier,
 				current);
 	if (ret) {
 		ret = -errno;
@@ -1240,7 +1240,7 @@ int afs_osd_init(struct afs_osd *self, int ndev, char **devpaths, int direct,
 	pthread_mutex_init(&current->lock, NULL);
 
 	INIT_LIST_HEAD(&current->rq);
-	ret = pthread_create(&current->id, NULL, &afs_osd_worker_task_checker,
+	ret = pthread_create(&current->id, NULL, &anfs_osd_worker_task_checker,
 				current);
 	if (ret) {
 		ret = -errno;
@@ -1267,7 +1267,7 @@ out_clean:
 	return ret;
 }
 
-void afs_osd_exit(struct afs_osd *self)
+void anfs_osd_exit(struct anfs_osd *self)
 {
 	int i;
 
@@ -1287,9 +1287,9 @@ void afs_osd_exit(struct afs_osd *self)
 		free(copier_devs);
 }
 
-int afs_osd_submit_request(struct afs_osd *self, struct afs_osd_request *req)
+int anfs_osd_submit_request(struct anfs_osd *self, struct anfs_osd_request *req)
 {
-	struct afs_osd_worker *worker;
+	struct anfs_osd_worker *worker;
 
 	if (!self || !req)
 		return -EINVAL;
@@ -1301,7 +1301,7 @@ int afs_osd_submit_request(struct afs_osd *self, struct afs_osd_request *req)
 	else
 		worker = &self->workers[req->dev];
 
-	req->t_submit = afs_now();
+	req->t_submit = anfs_now();
 
 	lock_rq(worker);
 	list_add_tail(&req->list, &worker->rq);
@@ -1310,10 +1310,10 @@ int afs_osd_submit_request(struct afs_osd *self, struct afs_osd_request *req)
 	return 0;
 }
 
-int afs_osd_create_collection(struct afs_osd *self, int dev, uint64_t pid,
+int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t *cid)
 {
-	struct afs_osd_dev *aosd = &self->workers[dev].osd;
+	struct anfs_osd_dev *aosd = &self->workers[dev].osd;
 
 	if (self->workers[dev].direct)
 		return osd_create_collection_osdlib(aosd, pid, cid);
@@ -1321,17 +1321,17 @@ int afs_osd_create_collection(struct afs_osd *self, int dev, uint64_t pid,
 		return osd_create_collection_exofs(aosd, dev, pid, cid);
 }
 
-int afs_osd_set_membership(struct afs_osd *self, int dev, uint64_t pid,
+int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t cid, uint64_t *objs, uint32_t len)
 {
-	struct afs_osd_dev *aosd = &self->workers[dev].osd;
+	struct anfs_osd_dev *aosd = &self->workers[dev].osd;
 	return osd_set_membership_osdlib(aosd, pid, cid, objs, len);
 }
 
-int afs_osd_get_file_size(struct afs_osd *self, int dev, uint64_t pid,
+int anfs_osd_get_file_size(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t oid, uint64_t *size)
 {
-	struct afs_osd_dev *aosd = &self->workers[dev].osd;
+	struct anfs_osd_dev *aosd = &self->workers[dev].osd;
 
 	if (self->workers[dev].direct)
 		return osd_get_object_size_osdlib(aosd, pid, oid, size);

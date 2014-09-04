@@ -7,7 +7,7 @@
 #ifndef	__AFS_CONFIG_H__
 #define	__AFS_CONFIG_H__
 
-struct afs_config {
+struct anfs_config {
 	char *configfile;
 	char *dbfile;
 
@@ -22,7 +22,7 @@ struct afs_config {
 };
 
 /**
- * afs_config_init reads configurations from the specified file.
+ * anfs_config_init reads configurations from the specified file.
  *
  * @self: the structure to be initialized by calling this. the space should be
  * allocated by the caller.
@@ -30,14 +30,14 @@ struct afs_config {
  *
  * returns 0 on success, negatives on errors.
  */
-int afs_config_init(struct afs_config *self, const char *cfile);
+int anfs_config_init(struct anfs_config *self, const char *cfile);
 
 /**
- * afs_config_exit deallocates memory space of afs_config
+ * anfs_config_exit deallocates memory space of anfs_config
  *
- * @self: afs_config structure.
+ * @self: anfs_config structure.
  */
-static inline void afs_config_exit(struct afs_config *self)
+static inline void anfs_config_exit(struct anfs_config *self)
 {
 	if (self) {
 		if (self->configfile)

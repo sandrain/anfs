@@ -5,4 +5,4 @@
  * utility functions for activefs.
  */
 
-#include "activefs.h"
+#include "anfs.h"

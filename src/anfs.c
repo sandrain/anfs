@@ -7,8 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include <stddef.h>
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
@@ -23,119 +21,254 @@
 #define FUSE_USE_VERSION		26
 #include <fuse.h>
 
-#include "activefs.h"
+#include "anfs.h"
 
-static struct afs_ctx __ctx;
-static struct afs_ctx *ctx = &__ctx;
+static struct anfs_ctx __ctx;
+static struct anfs_ctx *ctx = &__ctx;
+
+#define	anfs_fuse_ctx						\
+		((struct anfs_ctx *) (fuse_get_context()->private_data))
 
 /**
  * implementation of the fuse file operations.
+ *
+ * hs2: changes from the activefs implementation
+ * - we don't use the filer/osd abstractions.
+ * - we dont' use the low-level fuse api.
  */
 
 static int anfs_getattr(const char *path, struct stat *stbuf)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_getattr(anfs_mdb(self), path, stbuf);
 }
 
 static int anfs_readlink(const char *path, char *link, size_t size)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_readlink(anfs_mdb(self), path, link, size);
 }
 
 static int anfs_mknod(const char *path, mode_t mode, dev_t dev)
 {
+	int ret;
+	uint64_t ino;
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	ret = anfs_mdb_mknod(anfs_mdb(self), path, mode, dev, &ino);
+	if (ret)
+		return ret;
+
+	if (S_ISREG(mode))	/** backend file for regular file. */
+		ret = anfs_store_create(anfs_store(self), ino, -1);
+
+	return ret;
 }
 
 static int anfs_mkdir(const char *path, mode_t mode)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_mkdir(anfs_mdb(self), path, mode);
 }
 
 static int anfs_unlink(const char *path)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_unlink(anfs_mdb(self), path);
 }
 
 static int anfs_rmdir(const char *path)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_rmdir(anfs_mdb(self), path);
 }
 
 static int anfs_symlink(const char *path, const char *link)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_symlink(anfs_mdb(self), path, link);
 }
 
 static int anfs_rename(const char *old, const char *new)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_rename(anfs_mdb(self), old, new);
 }
 
 static int anfs_link(const char *path, const char *new)
 {
+	return -ENOSYS;
 }
 
 static int anfs_chmod(const char *path, mode_t mode)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_chmod(anfs_mdb(self), path, mode);
 }
 
 static int anfs_chown(const char *path, uid_t uid, gid_t gid)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_chown(anfs_mdb(self), path, uid, gid);
 }
 
 static int anfs_truncate(const char *path, off_t newsize)
 {
+	int ret, index;
+	uint64_t ino;
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	anfs_mdb_tx_begin(anfs_mdb(self));
+
+	ret = anfs_mdb_truncate(anfs_mdb(self), path, newsize);
+	if (ret)
+		goto out_fail;
+
+	ret = anfs_mdb_get_ino_loc(anfs_mdb(self), path, &ino, &index);
+	if (ret)
+		goto out_fail;
+
+	ret = anfs_store_truncate(anfs_store(self), ino, index, newsize);
+	if (ret)
+		goto out_fail;
+
+	anfs_mdb_tx_commit(anfs_mdb(self));
+	return 0;
+
+out_fail:
+	anfs_mdb_tx_abort(anfs_mdb(self));
+	return ret;
 }
 
 static int anfs_utime(const char *path, struct utimbuf *tbuf)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_utime(anfs_mdb(self), path, tbuf);
 }
 
 static int anfs_open(const char *path, struct fuse_file_info *fi)
 {
+	int ret, index;
+	uint64_t ino;
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	ret = anfs_mdb_get_ino_loc(anfs_mdb(self), path, &ino, &index);
+	if (ret)
+		return ret;
+
+	ret = anfs_store_open(anfs_store(self), ino, index, fi->flags);
+	if (ret < 0)
+		return -errno;
+
+	fi->fh = ret;
+	return 0;
 }
 
 static int anfs_read(const char *path, char *buf, size_t size,
-				off_t offset, struct fuse_file_info *fi)
+			off_t offset, struct fuse_file_info *fi)
 {
+	ssize_t ret;
+	__anfs_unused(path);
+
+	return pread(fi->fh, buf, size, offset);
 }
 
 static int anfs_write(const char *path, const char *buf, size_t size,
-				off_t offset, struct fuse_file_info *fi)
+			off_t offset, struct fuse_file_info *fi)
 {
+	int ret;
+	size_t written;
+	struct stat stbuf;
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	written = pwrite(fi->fh, buf, size, offset);
+	if (written < 0)
+		return ret;
+
+	anfs_mdb_tx_begin(anfs_mdb(self));
+
+	/** on the change of the file size, update the metadata */
+	ret = anfs_mdb_getattr(anfs_mdb(self), path, &stbuf);
+	if (ret)
+		goto out_fail;
+
+	if (stbuf.st_size < offset + written) {
+		ret = anfs_mdb_truncate(anfs_mdb(self), path, offset+written);
+		if (ret)
+			goto out_fail;
+	}
+
+	anfs_mdb_tx_commit(anfs_mdb(self));
+	return written;
+
+out_fail:
+	anfs_mdb_tx_abort(anfs_mdb(self));
+	return ret;
 }
 
 static int anfs_statfs(const char *path, struct statvfs *vfs)
 {
+	int ret;
+	struct statfs fs;
+
+	if ((ret = statfs("/", &fs)) < 0)
+		return ret;
+
+	vfs->f_bsize = fs.f_bsize;
+	vfs->f_frsize = 512;
+	vfs->f_blocks = fs.f_blocks;
+	vfs->f_bfree = fs.f_bfree;
+	vfs->f_bavail = fs.f_bavail;
+	vfs->f_files = 0xfffffff;
+	vfs->f_ffree = 0xffffff;
+	vfs->f_fsid = ANFS_MAGIC;
+	vfs->f_flag = 0;
+	vfs->f_namemax = 256;
+
+	return 0;
 }
 
+/** this handler is called upon every close(2) */
 static int anfs_flush(const char *path, struct fuse_file_info *fi)
 {
+	return 0;
 }
 
 static int anfs_release(const char *path, struct fuse_file_info *fi)
 {
+	return close(fi->fh);
 }
 
-static int anfs_release(const char *path, struct fuse_file_info *fi)
+static int anfs_fsync(const char *path, int datasync,
+			struct fuse_file_info *fi)
 {
+	return datasync ? fdatasync(fi->fh) : fsync(fi->fh);
 }
 
+/** TODO: implement the extended attributes */
 static int anfs_setxattr(const char *path, const char *name,
 				const char *value, size_t size, int flags)
 {
+	return -ENOSYS;
 }
 
 static int anfs_getxattr(const char *path, const char *name,
 				char *value, size_t size)
 {
+	return -ENOSYS;
 }
 
 static int anfs_listxattr(const char *path, char *list, size_t size)
 {
+	return -ENOSYS;
 }
 
 static int anfs_removexattr(const char *path, const char *name)
 {
+	return -ENOSYS;
 }
 
-/**
- *  * our implementation of readdir is stateless.
- *   */
-
+/** readdir implementation is stateless. nothing to do here. */
 static int anfs_opendir(const char *path, struct fuse_file_info *fi)
 {
 	return 0;
@@ -144,6 +277,26 @@ static int anfs_opendir(const char *path, struct fuse_file_info *fi)
 static int anfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 				off_t offset, struct fuse_file_info *fi)
 {
+	int ret;
+	uint64_t pos = offset;
+	struct anfs_dirent dirent;
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	/** TODO: this is not efficient since it fetches entries one by one.
+	 */
+	do {
+		ret = anfs_mdb_readdir(anfs_mdb(self), path, pos, &dirent);
+		if (ret == 0)
+			break;
+		else if (ret < 0)
+			return ret;
+		else {
+			ret = filler(buf, dirent.d_name, &dirent.stat, 0);
+			pos++;
+		}
+	} while (ret == 0);
+
+	return 0;
 }
 
 static int anfs_releasedir(const char *path, struct fuse_file_info *fi)
@@ -159,10 +312,76 @@ static int anfs_fsyncdir(const char *path, int datasync,
 
 static void *anfs_init(struct fuse_conn_info *conn)
 {
+	int i, ret;
+	int ndev = 0;
+	char *devs[ANFS_MAX_DEV];
+	char *devstr, *token;
+	struct anfs_super *super;
+	struct anfs_ctx *self = ctx;
+
+	/** initialize the db module and read superblock from db */
+	ret = anfs_mdb_init(anfs_mdb(self), anfs_config(self)->dbfile);
+	if (ret)
+		goto out_err;
+
+	super = anfs_super(self);
+	ret = anfs_mdb_read_super(anfs_mdb(self), super, 0);
+	if (ret)
+		goto out_err;
+
+	ndev = super->ndev;
+	devstr = strdup(super->devs);
+
+	i = 0;
+	while (1) {
+		token = strsep(&devstr, ",");
+		if (!token)
+			break;
+		devs[i++] = token;
+	}
+	if (i != ndev)
+		goto out_err;
+
+	/** initialize the rest of the modules */
+#if 0
+	ret = anfs_osd_init(anfs_osd(self), ndev, devs, super->direct, 100);
+	if (ret)
+		goto out_err;
+	ret = anfs_sched_init(anfs_sched(self));
+	if (ret)
+		goto out_err;
+#endif
+	ret = anfs_store_init(anfs_store(self), ndev, devs);
+	if (ret)
+		goto out_err;
+#if 0
+	ret = anfs_pathdb_init(anfs_pathdb(self),
+				anfs_config(self)->pathdb_path);
+	if (ret)
+		goto out_err;
+#endif
+
+	free(devstr);
+	return self;
+
+out_err:
+	exit(1);
 }
 
 static void anfs_destroy(void *context)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+#if 0
+	anfs_pathdb_exit(anfs_pathdb(self));
+#endif
+	anfs_store_exit(anfs_store(self));
+#if 0
+	anfs_sched_exit(anfs_sched(self));
+	anfs_osd_exit(anfs_osd(self));
+#endif
+	anfs_mdb_exit(anfs_mdb(self));
+	anfs_config_exit(anfs_config(self));
 }
 
 static int anfs_access(const char *path, int mask)
@@ -172,17 +391,40 @@ static int anfs_access(const char *path, int mask)
 }
 
 static int anfs_ftruncate(const char *path, off_t newsize,
-					struct fuse_file_info *fi)
+				struct fuse_file_info *fi)
 {
+	int ret = 0;
+	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	anfs_mdb_tx_begin(anfs_mdb(self));
+
+	ret = anfs_mdb_truncate(anfs_mdb(self), path, newsize);
+	if (ret)
+		goto out_fail;
+
+	ret = ftruncate(fi->fh, newsize);
+	if (ret)
+		goto out_fail;
+
+	anfs_mdb_tx_commit(anfs_mdb(self));
+
+	return ret;
+
+out_fail:
+	anfs_mdb_tx_abort(anfs_mdb(self));
+	return ret;
 }
 
 static int anfs_fgetattr(const char *path, struct stat *stbuf,
-					struct fuse_file_info *fi)
+				struct fuse_file_info *fi)
 {
+	struct anfs_ctx *self = anfs_fuse_ctx;
+	return anfs_mdb_getattr(anfs_mdb(self), path, stbuf);
 }
 
 static int anfs_utimens(const char *path, const struct timespec tv[2])
 {
+	return -ENOSYS;
 }
 
 
@@ -236,6 +478,7 @@ static struct fuse_operations anfs_ops = {
 
 enum {
 	OPTKEY_DEBUG	= 0,
+	OPTKEY_CONFIG,
 	OPTKEY_HELP
 };
 
@@ -302,13 +545,6 @@ int main(int argc, char **argv)
 	int ret;
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-#if 0
-	/** not necessary for now */
-	int uid, gid;
-	uid = getuid();
-	gid = getgid();
-#endif
-
 	if (fuse_opt_parse(&args, NULL, anfs_fuse_opts, anfs_process_opt) < 0)
 		return -EINVAL;
 
@@ -322,7 +558,7 @@ int main(int argc, char **argv)
 	if (!anfs_conf_file)
 		anfs_conf_file = ANFS_DEFAULT_CONF_FILE;
 
-	ret = afs_config_init(afs_config(ctx), anfs_conf_file);
+	ret = anfs_config_init(anfs_config(ctx), anfs_conf_file);
 	if (ret) {
 		fprintf(stderr, "failed to parse the configuration file (%s)\n",
 				anfs_conf_file);
@@ -331,6 +567,6 @@ int main(int argc, char **argv)
 
 	ctx->root = anfs_root;
 
-	return fuse_main(args.argc, args.argv, &anfs_ops, __ctx);
+	return fuse_main(args.argc, args.argv, &anfs_ops, ctx);
 }
 

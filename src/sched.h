@@ -11,8 +11,8 @@
 #include <pthread.h>
 #include "parser.h"
 
-struct afs_task;
-struct afs_job;
+struct anfs_task;
+struct anfs_job;
 
 /**
  * data availability.
@@ -23,19 +23,19 @@ enum {
 	AFS_SCHED_DATA_REUSE,		/** can reuse old one from lineage */
 };
 
-struct afs_data_file {
+struct anfs_data_file {
 	int available;
 	uint64_t ino;
 	int osd;
 	uint64_t size;
-	struct afs_task *producer;
+	struct anfs_task *producer;
 	uint64_t parent;
 	const char *path;
 };
 
-struct afs_task_data {
+struct anfs_task_data {
 	uint32_t n_files;
-	struct afs_data_file *files[0];
+	struct anfs_data_file *files[0];
 };
 
 /**
@@ -54,12 +54,12 @@ enum {
 	AFS_SCHED_TASK_ABANDONED,	/* task abandoned due to job abort */
 };
 
-struct afs_task {
-	struct afs_job *job;
+struct anfs_task {
+	struct anfs_job *job;
 	const char *name;
 	const char *kernel;
 	char *argument;
-	struct list_head list;	/** task list in the afs_job */
+	struct list_head list;	/** task list in the anfs_job */
 
 	int status;		/** task status (AFS_SCHED_TASK_..) */
 	int ret;		/** exit status after execution */
@@ -68,10 +68,10 @@ struct afs_task {
 	int io_inflight;	/** in flight io counter */
 
 	uint64_t input_cid;	/** collection id for input files */
-	struct afs_task_data *input;
+	struct anfs_task_data *input;
 
 	uint64_t output_cid;	/** collection id for output files */
-	struct afs_task_data *output;
+	struct anfs_task_data *output;
 
 	uint64_t tid;
 	uint64_t koid;
@@ -95,7 +95,7 @@ struct afs_task {
 	uint64_t bytes_transfers;	/** bytes transfered */
 };
 
-struct afs_job {
+struct anfs_job {
 	uint64_t id;
 	const char *name;
 
@@ -124,7 +124,7 @@ enum {
 	AFS_SCHED_N_POLICIES,
 };
 
-struct afs_sched {
+struct anfs_sched {
 	/** scheduling policy */
 	int policy;
 
@@ -136,7 +136,7 @@ struct afs_sched {
 /**
  * logging
  */
-static inline int afs_job_log_open(struct afs_job *job)
+static inline int anfs_job_log_open(struct anfs_job *job)
 {
 	FILE *fp;
 	char nbuf[128];
@@ -144,7 +144,7 @@ static inline int afs_job_log_open(struct afs_job *job)
 	if (!job)
 		return -EINVAL;
 
-	sprintf(nbuf, "/tmp/afsjobs/%llu", afs_llu(job->id));
+	sprintf(nbuf, "/tmp/afsjobs/%llu", anfs_llu(job->id));
 	fp = fopen(nbuf, "w");
 
 	if (!fp)
@@ -156,24 +156,24 @@ static inline int afs_job_log_open(struct afs_job *job)
 	return 0;
 }
 
-static inline void afs_job_log_close(struct afs_job *job)
+static inline void anfs_job_log_close(struct anfs_job *job)
 {
 	if (job && job->log)
 		fclose(job->log);
 }
 
-#define	afs_job_log(job, format, args...)			\
-	fprintf(job->log, "[%llu] " format, afs_llu(afs_now()), ## args)
-#define	afs_task_log(task, format, args...)			\
+#define	anfs_job_log(job, format, args...)			\
+	fprintf(job->log, "[%llu] " format, anfs_llu(anfs_now()), ## args)
+#define	anfs_task_log(task, format, args...)			\
 	fprintf(task->job->log, "[%llu] %s (%p): " format,	\
-			afs_llu(afs_now()), task->name, task, ## args)
-#define afs_job_report(job, format, args...)			\
+			anfs_llu(anfs_now()), task->name, task, ## args)
+#define anfs_job_report(job, format, args...)			\
 	fprintf(job->log, format, ## args)
 
-static inline void afs_sched_dump_task_data(struct afs_task_data *td, FILE *st)
+static inline void anfs_sched_dump_task_data(struct anfs_task_data *td, FILE *st)
 {
 	int i;
-	struct afs_data_file *current;
+	struct anfs_data_file *current;
 	const char *pre = "    ";
 
 	fprintf(st, "%s%d files: \n", pre, td->n_files);
@@ -188,7 +188,7 @@ static inline void afs_sched_dump_task_data(struct afs_task_data *td, FILE *st)
 	}
 }
 
-static inline void afs_sched_dump_task(struct afs_task *task, FILE *st)
+static inline void anfs_sched_dump_task(struct anfs_task *task, FILE *st)
 {
 	const char *pre = "  ";
 
@@ -196,24 +196,24 @@ static inline void afs_sched_dump_task(struct afs_task *task, FILE *st)
 	fprintf(st, "%skernel = %s\n", pre, task->kernel);
 	fprintf(st, "%sargument = %s\n", pre, task->argument);
 	fprintf(st, "%sinput:\n", pre);
-	afs_sched_dump_task_data(task->input, st);
+	anfs_sched_dump_task_data(task->input, st);
 	fprintf(st, "%soutput:\n", pre);
-	afs_sched_dump_task_data(task->output, st);
+	anfs_sched_dump_task_data(task->output, st);
 	fprintf(st, "\n");
 }
 
-static inline void afs_sched_dump_job(struct afs_job *job, FILE *st)
+static inline void anfs_sched_dump_job(struct anfs_job *job, FILE *st)
 {
-	struct afs_task *t;
+	struct anfs_task *t;
 
 	fprintf(st, "JOB %s (%u tasks)======\n\n", job->name, job->n_tasks);
 
 	list_for_each_entry(t, &job->task_list, list) {
-		afs_sched_dump_task(t, st);
+		anfs_sched_dump_task(t, st);
 	}
 }
 
-#define	afs_job_log_dump(job)	afs_sched_dump_job(job, (job)->log)
+#define	anfs_job_log_dump(job)	anfs_sched_dump_job(job, (job)->log)
 
 
 /**
@@ -227,14 +227,14 @@ static inline void afs_sched_dump_job(struct afs_job *job, FILE *st)
  *
  * 
  */
-int afs_sched_init(struct afs_sched *self);
+int anfs_sched_init(struct anfs_sched *self);
 
 /**
  * 
  *
  * @self
  */
-void afs_sched_exit(struct afs_sched *self);
+void anfs_sched_exit(struct anfs_sched *self);
 
 /**
  * 
@@ -244,7 +244,7 @@ void afs_sched_exit(struct afs_sched *self);
  *
  * 
  */
-int afs_sched_submit_job(struct afs_sched *self, const uint64_t ino);
+int anfs_sched_submit_job(struct anfs_sched *self, const uint64_t ino);
 
 #endif	/** __AFS_SCHED_H__ */
 

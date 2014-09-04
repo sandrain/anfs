@@ -6,18 +6,18 @@
  */
 #include <errno.h>
 #include <libconfig.h>
-#include "activefs.h"
+#include "anfs.h"
 
-struct afs_parser_data {
+struct anfs_parser_data {
 	config_t config;
-	struct afs_job *current;
+	struct anfs_job *current;
 	const char *script;
 	const char *bindir;
 	const char *datadir;
-	afs_htable datahash;
+	anfs_htable datahash;
 };
 
-static inline void cleanup_task(struct afs_task *t)
+static inline void cleanup_task(struct anfs_task *t)
 {
 	if (t->name && t->name != t->kernel)
 		free((void *) t->name);
@@ -28,11 +28,11 @@ static inline void cleanup_task(struct afs_task *t)
 	free(t);
 }
 
-static inline void cleanup_task_data(struct afs_task *t)
+static inline void cleanup_task_data(struct anfs_task *t)
 {
 	int i;
-	struct afs_task_data *td;
-	struct afs_data_file *df;
+	struct anfs_task_data *td;
+	struct anfs_data_file *df;
 
 	if (t->input) {
 		td = t->input;
@@ -61,71 +61,71 @@ static inline void cleanup_task_data(struct afs_task *t)
 	}
 }
 
-static inline void cleanup_success(struct afs_parser_data *self)
+static inline void cleanup_success(struct anfs_parser_data *self)
 {
-	afs_hash_exit(&self->datahash);
+	anfs_hash_exit(&self->datahash);
 	config_destroy(&self->config);
 }
 
-static inline void cleanup_fail(struct afs_parser_data *self)
+static inline void cleanup_fail(struct anfs_parser_data *self)
 {
 	if (self->current)
-		afs_parser_cleanup_job(self->current);
+		anfs_parser_cleanup_job(self->current);
 
 	cleanup_success(self);
 }
 
-static const char *get_afs_bin_path(struct afs_parser_data *self, const char *s)
+static const char *get_anfs_bin_path(struct anfs_parser_data *self, const char *s)
 {
 	char *sb;
 
 	if (s[0] == '/')
-		return afs_strdup(s);
+		return anfs_strdup(s);
 
-	sb = afs_calloc(1, strlen(self->bindir) + strlen(s) + 1);
+	sb = anfs_calloc(1, strlen(self->bindir) + strlen(s) + 1);
 	sprintf(sb, "%s%s", self->bindir, s);
 
 	return sb;
 }
 
-static const char *get_afs_data_path(struct afs_parser_data *self,
+static const char *get_anfs_data_path(struct anfs_parser_data *self,
 					const char *s)
 {
 	char *sb;
 
 	if (s[0] == '/')
-		return afs_strdup(s);
+		return anfs_strdup(s);
 
-	sb = afs_calloc(1, strlen(self->datadir) + strlen(s) + 1);
+	sb = anfs_calloc(1, strlen(self->datadir) + strlen(s) + 1);
 	sprintf(sb, "%s%s", self->datadir, s);
 
 	return sb;
 }
 
-static struct afs_task *alloc_tasklet(struct afs_parser_data *self,
-				struct afs_job *job, config_setting_t *task)
+static struct anfs_task *alloc_tasklet(struct anfs_parser_data *self,
+				struct anfs_job *job, config_setting_t *task)
 {
 	int ret = 0;
 	long affinity = -1;
 	const char *tmp;
-	struct afs_task *tasklet = afs_calloc(1, sizeof(*tasklet));
+	struct anfs_task *tasklet = anfs_calloc(1, sizeof(*tasklet));
 
 	tasklet->job = job;
 
 	ret = config_setting_lookup_string(task, "kernel", &tmp);
 	if (ret != CONFIG_TRUE)
 		goto out_free;
-	tasklet->kernel = get_afs_bin_path(self, tmp);
+	tasklet->kernel = get_anfs_bin_path(self, tmp);
 
 	ret = config_setting_lookup_string(task, "name", &tmp);
 	if (ret != CONFIG_TRUE)
 		tasklet->name = tasklet->kernel;
 	else
-		tasklet->name = afs_strdup(tmp);
+		tasklet->name = anfs_strdup(tmp);
 
 	ret = config_setting_lookup_string(task, "argument", &tmp);
 	if (ret == CONFIG_TRUE)
-		tasklet->argument = afs_strdup(tmp);
+		tasklet->argument = anfs_strdup(tmp);
 
 	ret = config_setting_lookup_int(task, "affinity", &affinity);
 	tasklet->affinity = affinity;
@@ -140,27 +140,27 @@ out_free:
 	return tasklet;
 }
 
-static int alloc_tasklet_input(struct afs_parser_data *self,
-			config_setting_t *task, struct afs_task *tasklet)
+static int alloc_tasklet_input(struct anfs_parser_data *self,
+			config_setting_t *task, struct anfs_task *tasklet)
 {
 	int i;
 	int count;
 	const char *tmp;
-	struct afs_data_file **file, *dt;
+	struct anfs_data_file **file, *dt;
 	config_setting_t *input = config_setting_get_member(task, "input");
 
 	if (!input) {
 		/**
 		 * the task doesn't have any input.
 		 */
-		tasklet->input = afs_calloc(1, sizeof(struct afs_task_data));
+		tasklet->input = anfs_calloc(1, sizeof(struct anfs_task_data));
 		tasklet->input->n_files = 0;
 		return 0;
 	}
 
 	count = config_setting_length(input);
-	tasklet->input = afs_calloc(1, sizeof(struct afs_task_data) +
-					count * sizeof(struct afs_data_file *));
+	tasklet->input = anfs_calloc(1, sizeof(struct anfs_task_data) +
+					count * sizeof(struct anfs_data_file *));
 	tasklet->input->n_files = count;
 
 	for (i = 0; i < count; i++) {
@@ -168,14 +168,14 @@ static int alloc_tasklet_input(struct afs_parser_data *self,
 		if (!tmp)
 			return -2;
 
-		tmp = get_afs_data_path(self, tmp);
-		dt = afs_hash_search(&self->datahash, tmp);
+		tmp = get_anfs_data_path(self, tmp);
+		dt = anfs_hash_search(&self->datahash, tmp);
 
 		if (dt)
 			tasklet->input->files[i] = dt;
 		else {
 			file = &tasklet->input->files[i];
-			*file = afs_calloc(1, sizeof(struct afs_data_file));
+			*file = anfs_calloc(1, sizeof(struct anfs_data_file));
 			(*file)->path = tmp;
 			(*file)->producer = NULL;
 		}
@@ -188,13 +188,13 @@ static int alloc_tasklet_input(struct afs_parser_data *self,
  * no need to bother resolving dependencies here. just allocate data for each
  * output entry.
  */
-static int alloc_tasklet_output(struct afs_parser_data *self,
-			config_setting_t *task, struct afs_task *tasklet)
+static int alloc_tasklet_output(struct anfs_parser_data *self,
+			config_setting_t *task, struct anfs_task *tasklet)
 {
 	int i;
 	int count;
 	const char *tmp;
-	struct afs_data_file **file;
+	struct anfs_data_file **file;
 	config_setting_t *output = config_setting_get_member(task, "output");
 
 	if (!output)
@@ -202,30 +202,30 @@ static int alloc_tasklet_output(struct afs_parser_data *self,
 
 	count = config_setting_length(output);
 
-	tasklet->output = afs_calloc(1, sizeof(struct afs_task_data) +
-				count * sizeof(struct afs_data_file *));
+	tasklet->output = anfs_calloc(1, sizeof(struct anfs_task_data) +
+				count * sizeof(struct anfs_data_file *));
 	tasklet->output->n_files = count;
 
 	for (i = 0; i < count; i++) {
 		file = &tasklet->output->files[i];
 		tmp = config_setting_get_string_elem(output, i);
-		tmp = get_afs_data_path(self, tmp);
+		tmp = get_anfs_data_path(self, tmp);
 
 		if (!tmp)
 			return -2;
 
-		(*file) = afs_calloc(1, sizeof(struct afs_data_file));
+		(*file) = anfs_calloc(1, sizeof(struct anfs_data_file));
 		(*file)->path = tmp;
 		(*file)->producer = tasklet;
 
-		afs_hash_insert(&self->datahash, tmp, *file);
+		anfs_hash_insert(&self->datahash, tmp, *file);
 	}
 
 	return 0;
 }
 
-static inline int alloc_tasklet_ios(struct afs_parser_data *self, 
-			config_setting_t *task, struct afs_task *tasklet)
+static inline int alloc_tasklet_ios(struct anfs_parser_data *self, 
+			config_setting_t *task, struct anfs_task *tasklet)
 {
 	int ret;
 
@@ -238,17 +238,17 @@ static inline int alloc_tasklet_ios(struct afs_parser_data *self,
 }
 
 #if 0
-static int process_argument(struct afs_parser_data *self, struct afs_task *task)
+static int process_argument(struct anfs_parser_data *self, struct anfs_task *task)
 {
 	return 0;
 }
 #endif
 
-static int build_tasks(struct afs_parser_data *self, struct afs_job *job,
+static int build_tasks(struct anfs_parser_data *self, struct anfs_job *job,
 			config_setting_t *task, struct list_head **link)
 {
 	int ret;
-	struct afs_task *tasklet;
+	struct anfs_task *tasklet;
 
 	tasklet = alloc_tasklet(self, job, task);
 	if (!tasklet)
@@ -270,7 +270,7 @@ static int build_tasks(struct afs_parser_data *self, struct afs_job *job,
 	return 1;
 }
 
-static int parse_script(struct afs_parser_data *self)
+static int parse_script(struct anfs_parser_data *self)
 {
 	int i, ret, count, sched = 0;
 	int n_tasks = 0;
@@ -278,10 +278,10 @@ static int parse_script(struct afs_parser_data *self)
 	struct list_head *link;
 	config_setting_t *tasks;
 	config_t *config = &self->config;
-	struct afs_job *job = self->current;
+	struct anfs_job *job = self->current;
 
 	if (config_lookup_string(config, "name", &tmp))
-		job->name = afs_strdup(tmp);
+		job->name = anfs_strdup(tmp);
 	if (config_lookup_string(config, "bindir", &tmp))
 		self->bindir = tmp;
 	if (config_lookup_string(config, "datadir", &tmp))
@@ -318,14 +318,14 @@ static int parse_script(struct afs_parser_data *self)
 	return n_tasks;
 }
 
-int afs_parser_parse_script(const char *buf, size_t len, struct afs_job **job)
+int anfs_parser_parse_script(const char *buf, size_t len, struct anfs_job **job)
 {
 	int ret;
 	FILE *stream;
-	struct afs_parser_data self;
+	struct anfs_parser_data self;
 
-	self.current = afs_calloc(1, sizeof(*self.current));
-	if (afs_hash_init(100, &self.datahash) == NULL)
+	self.current = anfs_calloc(1, sizeof(*self.current));
+	if (anfs_hash_init(100, &self.datahash) == NULL)
 		return -errno;
 
 	self.script = buf;
@@ -359,7 +359,7 @@ int afs_parser_parse_script(const char *buf, size_t len, struct afs_job **job)
 
 	/** moved to the job log */
 #if 0
-	afs_sched_dump_job(*job, stderr);
+	anfs_sched_dump_job(*job, stderr);
 #endif
 
 	ret = 0;
@@ -373,9 +373,9 @@ out_free:
 	return ret;
 }
 
-void afs_parser_cleanup_job(struct afs_job *job)
+void anfs_parser_cleanup_job(struct anfs_job *job)
 {
-	struct afs_task *t;
+	struct anfs_task *t;
 
 	/** FIXME: x2 scanning?? */
 	list_for_each_entry(t, &job->task_list, list) {
@@ -394,15 +394,15 @@ void afs_parser_cleanup_job(struct afs_job *job)
 #if 0
 #include <pthread.h>
 static inline
-struct afs_parser_data *fetch_work(struct list_head *q, pthread_mutex_t *lock)
+struct anfs_parser_data *fetch_work(struct list_head *q, pthread_mutex_t *lock)
 {
-	struct afs_parser_data *work = NULL;
+	struct anfs_parser_data *work = NULL;
 
 	pthread_mutex_lock(lock);
 	if (list_empty(q))
 		goto out;
 
-	work = list_first_entry(q, struct afs_parser_data, list);
+	work = list_first_entry(q, struct anfs_parser_data, list);
 	list_del(&work->list);
 
 out:
@@ -414,10 +414,10 @@ static void *parser_worker_func(void *arg)
 {
 	int ret;
 	unsigned long count = 0;
-	struct afs_parser *parser = (struct afs_parser *) arg;
+	struct anfs_parser *parser = (struct anfs_parser *) arg;
 	pthread_mutex_t *lock = &parser->wq_lock;
 	struct list_head *q = &parser->wq;
-	struct afs_parser_data *work;
+	struct anfs_parser_data *work;
 
 	while (1) {
 		work = fetch_work(q, lock);
@@ -435,7 +435,7 @@ static void *parser_worker_func(void *arg)
 	return (void *) count;
 }
 
-int afs_parser_init(struct afs_parser *self, struct afs_ctx *ctx)
+int anfs_parser_init(struct anfs_parser *self, struct anfs_ctx *ctx)
 {
 	pthread_t t;
 
@@ -455,7 +455,7 @@ int afs_parser_init(struct afs_parser *self, struct afs_ctx *ctx)
 	return 0;
 }
 
-void afs_parser_exit(struct afs_parser *self)
+void anfs_parser_exit(struct anfs_parser *self)
 {
 	void *ret;
 
@@ -464,11 +464,11 @@ void afs_parser_exit(struct afs_parser *self)
 	(void) pthread_join(self->worker, &ret);
 }
 
-int afs_parser_parse_script(struct afs_parser *self, const char *buf,
-				size_t len, struct afs_job **job)
+int anfs_parser_parse_script(struct anfs_parser *self, const char *buf,
+				size_t len, struct anfs_job **job)
 {
 	int ret;
-	struct afs_parser_data work;
+	struct anfs_parser_data work;
 
 	work.parser = self;
 	work.buf = buf;

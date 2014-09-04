@@ -226,8 +226,9 @@ static int do_mkfs(void)
 		goto out_err;
 
 	/** create the root inode(1) */
+#if 0
 	printf("creating the root inode ...\n");
-	sprintf(sqlbuf, "insert into afs_inode "
+	sprintf(sqlbuf, "insert into anfs_inode "
 		"(mode,nlink,uid,gid,rdev,size,ctime,atime,mtime,stmode) "
 		"values (?,?,?,?,?,?,?,?,?,?)");
 
@@ -287,7 +288,7 @@ static int do_mkfs(void)
 	sqlite3_finalize(stmt);
 
 	/** create directory entries. */
-	sprintf(sqlbuf, "insert into afs_dirent (d_ino,e_ino,name) "
+	sprintf(sqlbuf, "insert into anfs_dirent (d_ino,e_ino,name) "
 			"values (?,?,?)");
 	ret = sqlite3_prepare_v2(db, sqlbuf, -1, &stmt, NULL);
 	if (ret != SQLITE_OK)
@@ -341,13 +342,13 @@ static int do_mkfs(void)
 		goto out_err;
 
 	sqlite3_finalize(stmt);
+#endif
 
 	/** write the superblock */
 	printf("writing the superblock...\n");
-	sprintf(sqlbuf, "insert into afs_super "
-		"(version,ctime,ndev,devs,stsize,stwidth,direct,root,"
-		"i_jobs,i_failed,i_running,i_submit) "
-		"values (?,?,?,?,?,?,?,?,?,?,?,?)");
+	sprintf(sqlbuf, "insert into anfs_super "
+		"(version,ctime,ndev,devs,root,i_submit)"
+		"values (?,?,?,?,?,?)");
 
 	ret = sqlite3_prepare_v2(db, sqlbuf, -1, &stmt, NULL);
 	if (ret != SQLITE_OK)
@@ -362,14 +363,8 @@ static int do_mkfs(void)
 	sqlite3_bind_int(stmt, 2, current_time.tv_sec);
 	sqlite3_bind_int(stmt, 3, ndev);
 	sqlite3_bind_text(stmt, 4, devstr, -1, SQLITE_STATIC);
-	sqlite3_bind_int(stmt, 5, stsize);
-	sqlite3_bind_int(stmt, 6, stwidth);
-	sqlite3_bind_int(stmt, 7, direct);
-	sqlite3_bind_int64(stmt, 8, root_ino);
-	sqlite3_bind_int64(stmt, 9, jobs_ino);
-	sqlite3_bind_int64(stmt, 10, failed_ino);
-	sqlite3_bind_int64(stmt, 11, running_ino);
-	sqlite3_bind_int64(stmt, 12, submit_ino);
+	sqlite3_bind_int64(stmt, 5, 1);
+	sqlite3_bind_int64(stmt, 6, 2);
 
 	ret = sqlite3_step(stmt);
 	if (ret != SQLITE_DONE)

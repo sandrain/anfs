@@ -4,30 +4,30 @@
  * ---------------------------------------------------------------------------
  * some utility functions.
  */
-#ifndef	__AFS_UTIL_H__
-#define	__AFS_UTIL_H__
+#ifndef	__ANFS_UTIL_H__
+#define	__ANFS_UTIL_H__
 
 /**
  * commonly used stuffs..
  */
 
-#ifndef	afs_max
-#define afs_max(x, y)	((x) > (y) ? (x) : (y))
+#ifndef	anfs_max
+#define anfs_max(x, y)	((x) > (y) ? (x) : (y))
 #endif
 
-#ifndef	afs_min
-#define	afs_min(x, y)	((x) < (y) ? (x) : (y))
+#ifndef	anfs_min
+#define	anfs_min(x, y)	((x) < (y) ? (x) : (y))
 #endif
 
-#ifndef	afs_llu
-#define afs_llu(x)		((unsigned long long) (x))
+#ifndef	anfs_llu
+#define anfs_llu(x)		((unsigned long long) (x))
 #endif
 
-#define	__afs_unused(x)		((void) (x))
+#define	__anfs_unused(x)		((void) (x))
 
 #include <sys/time.h>
 
-static inline uint64_t afs_now(void)
+static inline uint64_t anfs_now(void)
 {
 	struct timeval t;
 	gettimeofday(&t, NULL);
@@ -43,17 +43,18 @@ static inline uint64_t afs_now(void)
 #include <ctype.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/time.h>
 
 /**
  * error handling
  */
 
-static inline void afs_err_warn(const char *s)
+static inline void anfs_err_warn(const char *s)
 {
 	fprintf(stderr, "%s\n", s);
 }
 
-static inline void afs_err_abort(const char *s)
+static inline void anfs_err_abort(const char *s)
 {
 	fprintf(stderr, "%s\n", s);
 	abort();
@@ -64,27 +65,27 @@ static inline void afs_err_abort(const char *s)
  * there is no way to recover, except for abnormal termination.
  */
 
-static inline char *afs_strdup(const char *s)
+static inline char *anfs_strdup(const char *s)
 {
 	char *ret = strdup(s);
 	if (!ret)
-		afs_err_abort("memory allocation failed (strdup)");
+		anfs_err_abort("memory allocation failed (strdup)");
 	return ret;
 }
 
-static inline void *afs_malloc(size_t size)
+static inline void *anfs_malloc(size_t size)
 {
 	void *ret = malloc(size);
 	if (!ret)
-		afs_err_abort("memory allocation failed (malloc)");
+		anfs_err_abort("memory allocation failed (malloc)");
 	return ret;
 }
 
-static inline void *afs_calloc(size_t nmemb, size_t size)
+static inline void *anfs_calloc(size_t nmemb, size_t size)
 {
 	void *ret = calloc(nmemb, size);
 	if (!ret)
-		afs_err_abort("memory allocation failed (calloc)");
+		anfs_err_abort("memory allocation failed (calloc)");
 	return ret;
 }
 
@@ -130,26 +131,44 @@ static inline int strempty(char *str)
 }
 
 /**
+ * getting timestamp of current time
+ */
+
+static inline uint64_t anfs_now_sec(void)
+{
+	struct timeval tmp;
+	gettimeofday(&tmp, NULL);
+	return tmp.tv_sec;
+}
+
+static inline uint64_t anfs_now_usec(void)
+{
+	struct timeval tmp;
+	gettimeofday(&tmp, NULL);
+	return tmp.tv_sec * 1000000 + tmp.tv_usec;
+}
+
+/**
  * simple hash table wrapper using std hsearch.
  */
 #include <string.h>
 #include <search.h>
 
-typedef	struct hsearch_data	afs_htable;
+typedef	struct hsearch_data	anfs_htable;
 
-static inline afs_htable *afs_hash_init(size_t nel, afs_htable *htab)
+static inline anfs_htable *anfs_hash_init(size_t nel, anfs_htable *htab)
 {
 	memset(htab, 0, sizeof(*htab));
 
 	return hcreate_r(nel, htab) ? htab : NULL;
 }
 
-static inline void afs_hash_exit(afs_htable *htab)
+static inline void anfs_hash_exit(anfs_htable *htab)
 {
 	hdestroy_r(htab);
 }
 
-static inline int afs_hash_insert(afs_htable *htab, const char *key, void *val)
+static inline int anfs_hash_insert(anfs_htable *htab, const char *key, void *val)
 {
 	ENTRY e, *tmp;
 
@@ -159,7 +178,7 @@ static inline int afs_hash_insert(afs_htable *htab, const char *key, void *val)
 	return hsearch_r(e, ENTER, &tmp, htab) ? 0 : errno;
 }
 
-static inline void *afs_hash_search(afs_htable *htab, const char *key)
+static inline void *anfs_hash_search(anfs_htable *htab, const char *key)
 {
 	ENTRY e, *tmp;
 
@@ -169,5 +188,5 @@ static inline void *afs_hash_search(afs_htable *htab, const char *key)
 	return hsearch_r(e, FIND, &tmp, htab) ? tmp->data : NULL;
 }
 
-#endif	/** __AFS_UTIL_H__ */
+#endif	/** __ANFS_UTIL_H__ */
 

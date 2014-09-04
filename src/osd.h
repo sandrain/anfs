@@ -11,7 +11,7 @@
 #include <pthread.h>
 #include <open-osd/libosd.h>
 
-struct afs_osd_dev {
+struct anfs_osd_dev {
 	struct osd_dev *osd;	/* osd device */
 	char *mnt;		/* mount path (exofs),
 				 * NULL if we use the direct osd library */
@@ -36,13 +36,13 @@ enum {
 	AFS_OSD_RQ_SET_MEMBERSHIP,	/* associate objects to a collection */
 };
 
-struct afs_osd_tasklet {
+struct anfs_osd_tasklet {
 };
 
 /**
  * request statistics.
  */
-struct afs_osd_rstat {
+struct anfs_osd_rstat {
 	uint64_t n_create;
 	uint64_t n_remove;
 	uint64_t n_read;
@@ -54,10 +54,10 @@ struct afs_osd_rstat {
 	uint64_t n_replicate;
 };
 
-struct afs_osd_request;
-typedef void (*afs_osd_req_callback_t) (int status, struct afs_osd_request *r);
+struct anfs_osd_request;
+typedef void (*anfs_osd_req_callback_t) (int status, struct anfs_osd_request *r);
 
-struct afs_osd_request {
+struct anfs_osd_request {
 	uint64_t id;		/* request id */
 	int type;		/* request type AFS_OSD_RQ_... */
 	int status;		/* return code after processing */
@@ -66,14 +66,14 @@ struct afs_osd_request {
 	uint64_t cid;
 
 	int destdev;		/* for creating a replication */
-	struct afs_task *task;	/* task for execute request */
+	struct anfs_task *task;	/* task for execute request */
 
 	void *buf;		/* data in/out buffer, or object list */
 	size_t size;		/* data to be transferred */
 	off_t off;		/* data offset */
 
 	void *priv;		/* your param to callback */
-	afs_osd_req_callback_t callback; /* callback function */
+	anfs_osd_req_callback_t callback; /* callback function */
 
 	struct list_head list;	/* internally-used list */
 
@@ -81,7 +81,7 @@ struct afs_osd_request {
 	uint64_t t_complete;
 };
 
-struct afs_osd_worker {
+struct anfs_osd_worker {
 	pthread_t id;		/* thread id */
 	int dev;		/* the device index i'm working on */
 	bool direct;		/* use direct osdlib? */
@@ -89,28 +89,28 @@ struct afs_osd_worker {
 	pthread_mutex_t lock;	/* lock for accessing the @rq */
 	struct list_head rq;	/* request queue */
 
-	struct afs_osd_dev osd;	/* the osd device handled by this thread */
-	struct afs_osd_rstat stat; /* request statistics */
+	struct anfs_osd_dev osd;	/* the osd device handled by this thread */
+	struct anfs_osd_rstat stat; /* request statistics */
 	uint64_t idle_sleep;	/* idle sleep time in usec */
 
 	/** access service threads from workers */
-	struct afs_osd_worker *copier;
-	struct afs_osd_worker *checker;
+	struct anfs_osd_worker *copier;
+	struct anfs_osd_worker *checker;
 };
 
-struct afs_osd {
+struct anfs_osd {
 	int ndev;
 	bool direct;
-	struct afs_osd_worker *workers;	/* dev request handlers */
-	struct afs_osd_worker *copier;	/* copy handlers */
-	struct afs_osd_worker *checker;	/* task status polling */
+	struct anfs_osd_worker *workers;	/* dev request handlers */
+	struct anfs_osd_worker *copier;	/* copy handlers */
+	struct anfs_osd_worker *checker;	/* task status polling */
 };
 
 /**
- * afs_osd_init initializes the osd component. this spawns worker threads for
+ * anfs_osd_init initializes the osd component. this spawns worker threads for
  * each osd device and establishes connections to devices.
  *
- * @self: afs_osd structure, the space should be allocated by the caller.
+ * @self: anfs_osd structure, the space should be allocated by the caller.
  * @ndev: number of devices. (the # of entries in @devpaths)
  * @devpaths: the device paths.
  * @direct: use direct osdlib (1) or not (0). the direct interface is not
@@ -119,27 +119,27 @@ struct afs_osd {
  *
  * returns 0 on success, negatives on errors.
  */
-int afs_osd_init(struct afs_osd *self, int ndev, char **devpaths, int direct,
+int anfs_osd_init(struct anfs_osd *self, int ndev, char **devpaths, int direct,
 		uint64_t idle_sleep);
 
 /**
- * afs_osd_exit terminates the osd component.
+ * anfs_osd_exit terminates the osd component.
  *
- * @self: afs_osd structure.
+ * @self: anfs_osd structure.
  */
-void afs_osd_exit(struct afs_osd *self);
+void anfs_osd_exit(struct anfs_osd *self);
 
 /**
- * afs_osd_submit_request submit an osd request. this function only queues the
+ * anfs_osd_submit_request submit an osd request. this function only queues the
  * request to a worker thread who is responsible for the actual processing. the
  * caller should examine the execution status via his own callback function.
  *
- * @self: afs_osd structure.
- * @req: request encoded using afs_osd_request.
+ * @self: anfs_osd structure.
+ * @req: request encoded using anfs_osd_request.
  *
  * returns 0 on success.
  */
-int afs_osd_submit_request(struct afs_osd *self, struct afs_osd_request *req);
+int anfs_osd_submit_request(struct anfs_osd *self, struct anfs_osd_request *req);
 
 /**
  * TODO:
@@ -155,7 +155,7 @@ int afs_osd_submit_request(struct afs_osd *self, struct afs_osd_request *req);
  *
  * 
  */
-int afs_osd_create_collection(struct afs_osd *self, int dev, uint64_t pid,
+int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t *cid);
 
 /**
@@ -169,7 +169,7 @@ int afs_osd_create_collection(struct afs_osd *self, int dev, uint64_t pid,
  *
  * 
  */
-int afs_osd_set_membership(struct afs_osd *self, int dev, uint64_t pid,
+int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t cid, uint64_t *objs, uint32_t len);
 
 /**
@@ -183,7 +183,7 @@ int afs_osd_set_membership(struct afs_osd *self, int dev, uint64_t pid,
  *
  * 
  */
-int afs_osd_get_file_size(struct afs_osd *self, int dev, uint64_t pid,
+int anfs_osd_get_file_size(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t oid, uint64_t *size);
 
 #endif	/** __AFS_OSD_H__ */
