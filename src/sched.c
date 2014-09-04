@@ -351,19 +351,18 @@ static int prepare_collections(struct anfs_ctx *afs, struct anfs_task *t)
 {
 	int ret;
 	uint64_t cids[2];
+	uint64_t partition = anfs_config(afs)->partition;
 	struct anfs_osd *anfs_osd = anfs_osd(afs);
 	struct anfs_job *job = t->job;
 
-	ret = anfs_mdb_assign_collection_ids(anfs_mdb(afs), 2, cids);
-	if (ret)
-		return ret;
-
-	ret = anfs_osd_create_collection(anfs_osd, t->osd, 0x22222, &cids[0]);
-	ret |= anfs_osd_create_collection(anfs_osd, t->osd, 0x22222, &cids[1]);
+	ret = anfs_osd_create_collection(anfs_osd, t->osd, partition,
+						&cids[0]);
+	ret |= anfs_osd_create_collection(anfs_osd, t->osd, partition,
+						&cids[1]);
 
 anfs_task_log(t, "input/output collections create (ret=%d).\n", ret);
 
-	if (!ret) {
+	if (!ret) {	/** success */
 		t->input_cid = cids[0];
 		t->output_cid = cids[1];
 	}

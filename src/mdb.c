@@ -32,6 +32,10 @@ enum {
 	MDB_SQL_READDIR,
 	MDB_SQL_GETLOCATION,
 	MDB_SQL_FINDPATH,
+	MDB_SQL_TASKOUTPUT,	/* 15 */
+	MDB_SQL_ADDREPLICA,
+	MDB_SQL_SEARCHREPLICA,
+	MDB_SQL_INVALREPLICA,
 
 	N_MDB_SQLS
 };
@@ -82,7 +86,20 @@ static const char *mdb_sqls[N_MDB_SQLS] = {
 	/** 13. MDB_SQL_GETLOCATION */
 	"select stloc from anfs_inode where id=?",
 
-	"SELECT d_ino,name FROM anfs_dirent WHERE e_ino=? LIMIT 1",
+	/** 14. MDB_SQL_FINDPATH */
+	"select d_ino,name from anfs_dirent where e_ino=? limit 1",
+
+	/** 15. MDB_SQL_TASKOUTPUT */
+	"update anfs_inode set size=?,stloc=? where id=?",
+
+	/** 16. MDB_SQL_ADDREPLICA */
+	"insert into anfs_replica (ino,dev) values (?,?)",
+
+	/** 17. MDB_SQL_SEARCHREPLICA */
+	"select id from anfs_replica where ino=? and dev=?",
+
+	/** 18. MDB_SQL_INVALREPLICA */
+	"delete from afs_replica where ino=?",
 };
 
 /**
@@ -286,16 +303,6 @@ out:
 	sqlite3_reset(stmt);
 	return ret;
 }
-
-/**
- * this is taken care of by sql trigger.
- */
-#if 0
-static int inode_remove(struct anfs_mdb *self, uint64_t ino)
-{
-	return 0;
-}
-#endif
 
 static int dirent_append(struct anfs_mdb *self, uint64_t pino,
 			uint64_t ino, const char *name, int isdir)
@@ -962,35 +969,113 @@ out:
 }
 
 int anfs_mdb_update_task_output_file(struct anfs_mdb *self, uint64_t ino,
-					int index, uint64_t size)
+					int location, uint64_t size)
 {
-	return 0;
-}
+	int ret = 0;
+	sqlite3_stmt *stmt;
 
-int anfs_mdb_assign_collection_ids(struct anfs_mdb *self, int n,
-					uint64_t *cids)
-{
-	return 0;
+	stmt = stmt_get(self, MDB_SQL_TASKOUTPUT);
+	ret = sqlite3_bind_int64(stmt, 1, size);
+	ret |= sqlite3_bind_int64(stmt, 2, location);
+	ret |= sqlite3_bind_int64(stmt, 3, ino);
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+
+	do {
+		ret = sqlite3_step(stmt);
+	} while (ret == SQLITE_BUSY);
+
+	ret = ret == SQLITE_DONE ? 0 : -EIO;
+out:
+	sqlite3_reset(stmt);
+	return ret;
 }
 
 int anfs_mdb_add_replication(struct anfs_mdb *self, uint64_t ino, int dev)
 {
-	return 0;
+	int ret = 0;
+	sqlite3_stmt *stmt;
+
+	if (!self)
+		return -EINVAL;
+
+	stmt = stmt_get(self, MDB_SQL_ADDREPLICA);
+	ret = sqlite3_bind_int64(stmt, 1, ino);
+	ret |= sqlite3_bind_int(stmt, 2, dev);
+
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+
+	do {
+		ret = sqlite3_step(stmt);
+	} while (ret == SQLITE_BUSY);
+
+	ret = ret == SQLITE_DONE ? 0 : -EIO;
+out:
+	sqlite3_reset(stmt);
+	return ret;
 }
 
 int anfs_mdb_replication_available(struct anfs_mdb *self, uint64_t ino,
 					int dev)
 {
-	return 0;
+	int ret = 0;
+	sqlite3_stmt *stmt;
+
+	if (!self)
+		return -EINVAL;
+
+	stmt = stmt_get(self, MDB_SQL_SEARCHREPLICA);
+	ret = sqlite3_bind_int64(stmt, 1, ino);
+	ret |= sqlite3_bind_int(stmt, 2, dev);
+
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+
+	do {
+		ret = sqlite3_step(stmt);
+	} while (ret == SQLITE_BUSY);
+
+	ret = ret == SQLITE_ROW ? 1 : 0;
+
+out:
+	sqlite3_reset(stmt);
+	return ret;
 }
 
 int anfs_mdb_invalidate_replica(struct anfs_mdb *self, uint64_t ino)
 {
-	return 0;
+	int ret = 0;
+	sqlite3_stmt *stmt;
+
+	if (!self)
+		return -EINVAL;
+
+	stmt = stmt_get(self, MDB_SQL_INVALREPLICA);
+	ret = sqlite3_bind_int64(stmt, 1, ino);
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+
+	do {
+		ret = sqlite3_step(stmt);
+	} while (ret == SQLITE_BUSY);
+
+	ret = ret == SQLITE_DONE ? 0 : -EIO;
+out:
+	sqlite3_reset(stmt);
+	return ret;
 }
 
 int anfs_mdb_get_file_location(struct anfs_mdb *self, uint64_t ino,
-				int *index)
+				int *location)
 {
 	int ret;
 	sqlite3_stmt *stmt;
@@ -1011,7 +1096,7 @@ int anfs_mdb_get_file_location(struct anfs_mdb *self, uint64_t ino,
 		goto out;
 	}
 
-	*index = sqlite3_column_int64(stmt, 0);
+	*location = sqlite3_column_int64(stmt, 0);
 
 out:
 	sqlite3_reset(stmt);

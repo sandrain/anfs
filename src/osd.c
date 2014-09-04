@@ -544,6 +544,7 @@ int anfs_osd_submit_request(struct anfs_osd *self,
 	return 0;
 }
 
+#if 0
 int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t *cid)
 {
@@ -590,6 +591,39 @@ int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 	}
 
 out:
+	osd_end_request(or);
+
+	return ret;
+}
+#endif
+
+int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
+				uint64_t *cid)
+{
+	int ret;
+	u8 creds[OSD_CAP_LEN];
+	struct osd_dev *osd = self->workers[dev].osd;
+	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
+	struct osd_obj_id obj = { .partition = pid, .id = 0 };
+
+	if (unlikely(!or))
+		return -ENOMEM;
+
+	if (!cid)
+		return -EINVAL;
+
+	if (*cid)
+		obj.id = *cid + ANFS_OBJECT_OFFSET;
+	else {
+		*cid = obj.id = get_exofs_sync_id(osd, dev);
+		if (0 == *cid)
+			return -EIO;
+	}
+
+	osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
+	osd_req_create_collection(or, &obj);
+
+	ret = osdblk_exec(or, creds);
 	osd_end_request(or);
 
 	return ret;

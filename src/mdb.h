@@ -98,10 +98,7 @@ int anfs_mdb_readdir(struct anfs_mdb *self, const char *path, uint64_t pos,
 int anfs_mdb_get_full_path(struct anfs_mdb *self, uint64_t ino, char *path);
 
 int anfs_mdb_update_task_output_file(struct anfs_mdb *self, uint64_t ino,
-					int index, uint64_t size);
-
-int anfs_mdb_assign_collection_ids(struct anfs_mdb *self, int n,
-					uint64_t *cids);
+					int location, uint64_t size);
 
 int anfs_mdb_add_replication(struct anfs_mdb *self, uint64_t ino, int dev);
 
@@ -111,7 +108,7 @@ int anfs_mdb_replication_available(struct anfs_mdb *self, uint64_t ino,
 int anfs_mdb_invalidate_replica(struct anfs_mdb *self, uint64_t ino);
 
 int anfs_mdb_get_file_location(struct anfs_mdb *self, uint64_t ino,
-				int *index);
+				int *location);
 
 #endif
 
