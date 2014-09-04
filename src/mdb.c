@@ -99,7 +99,7 @@ static const char *mdb_sqls[N_MDB_SQLS] = {
 	"select id from anfs_replica where ino=? and dev=?",
 
 	/** 18. MDB_SQL_INVALREPLICA */
-	"delete from afs_replica where ino=?",
+	"delete from anfs_replica where ino=?",
 };
 
 /**
