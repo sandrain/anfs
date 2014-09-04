@@ -17,13 +17,17 @@
 #include <unistd.h>
 
 enum {
+	ANFS_INO_ROOT		= 1,
+	ANFS_INO_SUBMIT		= 2,
+	ANFS_INO_NORMAL		= 3,		/* normal inode begins here */
+
 	ANFS_MAX_DEV		= 32,
 	ANFS_NAMELEN		= 256,
 
 	ANFS_OBJECT_OFFSET	= 0x10000,
 	ANFS_DEFAULT_PARTITION	= 0x22222,
 
-	ANFS_MAGIC		= 0x414e4653,	/** ANFS */
+	ANFS_MAGIC		= 0x414e4653,	/* ANFS */
 };
 
 #define	anfs_o2i(oid)		(oid - ANFS_OBJECT_OFFSET)

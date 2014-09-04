@@ -31,7 +31,7 @@ LIB += $(shell pkg-config --libs libconfig)
 LIB += -L../../activeosd/open-osd/lib -losd
 
 DEPEND = .dependencies
-TARGETS = mkactivefs anfs
+TARGETS = mkfs.anfs anfs
 PATHDB = /ccs/techint/home/hs2/afs_eval/pathdb.db
 
 all: $(DEPEND) $(TARGETS)
@@ -50,10 +50,10 @@ $(DEPEND): $(OBJ:.o=.c)
 	$(CC) -MM $(CFLAGS) $^ > $@
 
 ## mkactivefs
-mkactivefs: mkactivefs.o anfs-schema.o
+mkfs.anfs: mkanfs.o anfs-schema.o
 	$(CC) $(CFLAGS) $(LIB) -o $@ $^
 
-mkactivefs.o: mkactivefs.c
+mkanfs.o: mkanfs.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 anfs-schema.o: anfs-schema.c

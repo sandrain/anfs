@@ -38,6 +38,11 @@ void anfs_store_get_path(struct anfs_store *self, uint64_t ino, int index,
 {
 	int loc = index < 0 ? ino % self->n_backends : index;
 
+	if (ino < ANFS_INO_NORMAL) {	/* don't for virtual entries */
+		*buf = 0;
+		return;
+	}
+
 	sprintf(buf, "%s/%02x/%016llx.anfs", self->backends[loc],
 			(uint8_t) (ino & 0xffUL), anfs_llu(ino));
 }

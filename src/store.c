@@ -104,6 +104,7 @@ static void *copier(void *arg)
 		copy_file(req, path_dest, path_src);
 	}
 
+out:
 	return (void *) 0;
 }
 

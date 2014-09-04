@@ -23,6 +23,13 @@
 
 #include "anfs.h"
 
+/** our private record for file operations. */
+struct anfs_fh {
+	int fd;		/* -1 on virtual entries */
+	int location;	/* file location */
+	uint64_t ino;
+};
+
 static struct anfs_ctx __ctx;
 static struct anfs_ctx *ctx = &__ctx;
 
@@ -151,16 +158,29 @@ static int anfs_open(const char *path, struct fuse_file_info *fi)
 	int ret, index;
 	uint64_t ino;
 	struct anfs_ctx *self = anfs_fuse_ctx;
+	struct anfs_fh *handle = malloc(sizeof(*handle));
+
+	if (!handle)
+		return -ENOMEM;
 
 	ret = anfs_mdb_get_ino_loc(anfs_mdb(self), path, &ino, &index);
 	if (ret)
 		return ret;
 
-	ret = anfs_store_open(anfs_store(self), ino, index, fi->flags);
-	if (ret < 0)
-		return -errno;
+	handle->ino = ino;
+	handle->location = index;
 
-	fi->fh = ret;
+	if (ino >= ANFS_INO_NORMAL) {
+		ret = anfs_store_open(anfs_store(self), ino, index, fi->flags);
+		if (ret < 0)
+			return -errno;
+		handle->fd = ret;
+	}
+	else
+		handle->fd = -1;
+
+	fi->fh = (unsigned long) handle;
+
 	return 0;
 }
 
@@ -168,9 +188,15 @@ static int anfs_read(const char *path, char *buf, size_t size,
 			off_t offset, struct fuse_file_info *fi)
 {
 	ssize_t ret;
+	struct anfs_fh *handle = (struct anfs_fh *) fi->fh;
 	__anfs_unused(path);
 
-	return pread(fi->fh, buf, size, offset);
+	/** if we implement multiple special files, we need to implement the
+	 * read routine as well. */
+	if (handle->fd < 0)
+		return 0;
+	else
+		return pread(handle->fd, buf, size, offset);
 }
 
 static int anfs_write(const char *path, const char *buf, size_t size,
@@ -179,9 +205,24 @@ static int anfs_write(const char *path, const char *buf, size_t size,
 	int ret;
 	size_t written;
 	struct stat stbuf;
+	struct anfs_fh *handle = (struct anfs_fh *) fi->fh;
 	struct anfs_ctx *self = anfs_fuse_ctx;
 
-	written = pwrite(fi->fh, buf, size, offset);
+	if (handle->fd < 0) {
+		switch (handle->ino) {
+		case ANFS_INO_SUBMIT:
+			ret = anfs_sched_submit_job(anfs_sched(ctx),
+							handle->ino);
+			break;
+		default:
+			break;
+		}
+
+		return ret;
+	}
+
+	/** only normal files will fall here. */
+	written = pwrite(handle->fd, buf, size, offset);
 	if (written < 0)
 		return ret;
 
@@ -236,13 +277,25 @@ static int anfs_flush(const char *path, struct fuse_file_info *fi)
 
 static int anfs_release(const char *path, struct fuse_file_info *fi)
 {
-	return close(fi->fh);
+	int ret = 0;
+	struct anfs_fh *handle = (struct anfs_fh *) fi->fh;
+
+	if (handle->fd > 0)
+		ret = close(handle->fd);
+	free(handle);
+
+	return ret;
 }
 
 static int anfs_fsync(const char *path, int datasync,
 			struct fuse_file_info *fi)
 {
-	return datasync ? fdatasync(fi->fh) : fsync(fi->fh);
+	struct anfs_fh *handle = (struct anfs_fh *) fi->fh;
+
+	if (handle->fd < 0)
+		return 0;
+
+	return datasync ? fdatasync(handle->fd) : fsync(handle->fd);
 }
 
 /** TODO: implement the extended attributes */
@@ -387,7 +440,11 @@ static int anfs_ftruncate(const char *path, off_t newsize,
 				struct fuse_file_info *fi)
 {
 	int ret = 0;
+	struct anfs_fh *handle = (struct anfs_fh *) fi->fh;
 	struct anfs_ctx *self = anfs_fuse_ctx;
+
+	if (handle->fd < 0)
+		return 0;	/** do nothing for special files */
 
 	anfs_mdb_tx_begin(anfs_mdb(self));
 
@@ -395,7 +452,7 @@ static int anfs_ftruncate(const char *path, off_t newsize,
 	if (ret)
 		goto out_fail;
 
-	ret = ftruncate(fi->fh, newsize);
+	ret = ftruncate(handle->fd, newsize);
 	if (ret)
 		goto out_fail;
 

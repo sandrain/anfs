@@ -16,14 +16,13 @@
 #include <sqlite3.h>
 #include <open-osd/libosd.h>
 
-#define	AFS_MAX_DEV		32
-#define AFS_STRIPE_VIRTIO	1	/** activefs-common.h */
+#define	ANFS_MAX_DEV		16
 
 /**
  * filesystem params.
  */
 static int ndev;
-static char *devs[AFS_MAX_DEV];
+static char *devs[ANFS_MAX_DEV];
 static int stmode;
 static uint64_t stsize = (1<<20);	/** default striping: 1MB */
 static uint64_t stwidth;		/** default width = ndev */
@@ -34,7 +33,7 @@ static int direct;
  * database stuffs.
  */
 static sqlite3 *db;
-static const char *dbpath = "/tmp/afs.db";
+static const char *dbpath = "/tmp/anfs.db";
 static char sqlbuf[2048];
 extern char *create_sql;
 
@@ -43,8 +42,8 @@ extern char *create_sql;
  */
 static const char *usage_str = 
 "\n"
-"Usage: mkactivefs [option]...\n"
-"Creates and initializes activefs.\n\n"
+"Usage: mkfs.anfs [option]...\n"
+"Creates and initializes anfs.\n\n"
 "  -d, --device=<path>        An active osd device to be used.\n"
 "                             Multiple options can be used for specifying\n"
 "                             multiple devices.\n"
@@ -225,125 +224,6 @@ static int do_mkfs(void)
 	if (ret != SQLITE_OK)
 		goto out_err;
 
-	/** create the root inode(1) */
-#if 0
-	printf("creating the root inode ...\n");
-	sprintf(sqlbuf, "insert into anfs_inode "
-		"(mode,nlink,uid,gid,rdev,size,ctime,atime,mtime,stmode) "
-		"values (?,?,?,?,?,?,?,?,?,?)");
-
-	ret = sqlite3_prepare_v2(db, sqlbuf, -1, &stmt, NULL);
-	if (ret != SQLITE_OK)
-		goto out_err;
-
-	sqlite3_bind_int(stmt, 1, 0040000 | (0722 & ~022));
-	sqlite3_bind_int(stmt, 2, 2);
-	sqlite3_bind_int(stmt, 3, 0);
-	sqlite3_bind_int(stmt, 4, 0);
-	sqlite3_bind_int(stmt, 5, 0);
-	sqlite3_bind_int(stmt, 6, 1<<12);
-	sqlite3_bind_int(stmt, 7, current_time.tv_sec);
-	sqlite3_bind_int(stmt, 8, current_time.tv_sec);
-	sqlite3_bind_int(stmt, 9, current_time.tv_sec);
-	sqlite3_bind_int(stmt, 10, 0);
-
-	ret = sqlite3_step(stmt);
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	root_ino = sqlite3_last_insert_rowid(db);
-
-	/** create inodes for:
-	 * .jobs, .jobs/failed/, .jobs/running, .jobs/submit
-	 */
-	sqlite3_reset(stmt);	/** .jobs(2) */
-
-	sqlite3_bind_int(stmt, 1, 0040000 | 0555);
-	sqlite3_bind_int(stmt, 10, AFS_STRIPE_VIRTIO);
-
-	ret = sqlite3_step(stmt);
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	jobs_ino = sqlite3_last_insert_rowid(db);
-
-	sqlite3_reset(stmt);	/** .jobs/failed(3) */
-	ret = sqlite3_step(stmt);
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	failed_ino = sqlite3_last_insert_rowid(db);
-
-	sqlite3_reset(stmt);	/** .jobs/running(4) */
-	ret = sqlite3_step(stmt);
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	running_ino = sqlite3_last_insert_rowid(db);
-
-	sqlite3_reset(stmt);	/** .jobs/submit(5) */
-	sqlite3_bind_int(stmt, 1, 0100000 | 0200);
-	ret = sqlite3_step(stmt);
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	submit_ino = sqlite3_last_insert_rowid(db);
-
-	sqlite3_finalize(stmt);
-
-	/** create directory entries. */
-	sprintf(sqlbuf, "insert into anfs_dirent (d_ino,e_ino,name) "
-			"values (?,?,?)");
-	ret = sqlite3_prepare_v2(db, sqlbuf, -1, &stmt, NULL);
-	if (ret != SQLITE_OK)
-		goto out_err;
-
-	/** root */
-	ret = create_dirent(stmt, root_ino, root_ino, ".");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	ret = create_dirent(stmt, root_ino, root_ino, "..");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	/** .jobs */
-	ret = create_dirent(stmt, root_ino, jobs_ino, ".jobs");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	ret = create_dirent(stmt, jobs_ino, jobs_ino, ".");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	ret = create_dirent(stmt, jobs_ino, root_ino, "..");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	/** .jobs/failed */
-	ret = create_dirent(stmt, jobs_ino, failed_ino, "failed");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	ret = create_dirent(stmt, failed_ino, failed_ino, ".");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	ret = create_dirent(stmt, failed_ino, jobs_ino, "..");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	/** .jobs/running */
-	ret = create_dirent(stmt, jobs_ino, running_ino, "running");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	ret = create_dirent(stmt, running_ino, running_ino, ".");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-	ret = create_dirent(stmt, running_ino, jobs_ino, "..");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	/** .jobs/submit */
-	ret = create_dirent(stmt, jobs_ino, submit_ino, "submit");
-	if (ret != SQLITE_DONE)
-		goto out_err;
-
-	sqlite3_finalize(stmt);
-#endif
-
 	/** write the superblock */
 	printf("writing the superblock...\n");
 	sprintf(sqlbuf, "insert into anfs_super "
@@ -449,9 +329,9 @@ usage_exit:
 		return 1;
 	}
 
-	if (ndev > AFS_MAX_DEV) {
+	if (ndev > ANFS_MAX_DEV) {
 		fprintf(stderr, "Sorry, the maximum number of device is %d\n",
-			AFS_MAX_DEV);
+			ANFS_MAX_DEV);
 		return 1;
 	}
 

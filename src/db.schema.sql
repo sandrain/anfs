@@ -144,7 +144,7 @@ CREATE TABLE anfs_tasklet_io (
 	UNIQUE (tasklet, type, data)
 );
 
--- hardcode special inodes here (root inode, .submit: job submit file)
+-- hardcode special inodes here (.submit: job submit file)
 -- inode: 1
 insert into anfs_inode
 	(dev, mode, nlink, uid, gid, rdev, size, atime, mtime, ctime)
@@ -152,10 +152,16 @@ values
 	(0, 16832, 2, 0, 0, 0, 4096,
 	strftime('%s', 'now'), strftime('%s', 'now'), strftime('%s', 'now'));
 
-insert into anfs_dirent (d_ino, e_ino, name)
-	values (1, 1, '.');
-insert into anfs_dirent (d_ino, e_ino, name)
-	values (1, 1, '..');
+-- inode: 2
+insert into anfs_inode
+	(dev, mode, nlink, uid, gid, rdev, size, atime, mtime, ctime)
+values
+	(0, 32896, 1, 0, 0, 0, 0,
+	strftime('%s', 'now'), strftime('%s', 'now'), strftime('%s', 'now'));
+
+insert into anfs_dirent (d_ino, e_ino, name) values (1, 1, '.');
+insert into anfs_dirent (d_ino, e_ino, name) values (1, 1, '..');
+insert into anfs_dirent (d_ino, e_ino, name) values (1, 2, '.submit');
 
 END TRANSACTION;
 

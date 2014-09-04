@@ -1319,7 +1319,12 @@ int anfs_sched_submit_job(struct anfs_sched *self, const uint64_t ino)
 	char *buf;
 
 	anfs_store_get_path(anfs_store(ctx), ino, -1, pathbuf);
-	stat(pathbuf, &stbuf);
+	ret = stat(pathbuf, &stbuf);
+	if (ret < 0)
+		return -EINVAL;
+	if (!S_ISREG(stbuf.st_mode))
+		return -EINVAL;
+
 	buf = anfs_malloc(stbuf.st_size + 1);
 
 	if ((fp = fopen(pathbuf, "r")) == NULL)
