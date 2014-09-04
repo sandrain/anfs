@@ -16,3 +16,5 @@ else
 	mkdir /tmp/afsjobs
 fi
 
+scripts/pathdb-init.sh
+

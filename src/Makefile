@@ -19,9 +19,9 @@ CFLAGS += $(shell pkg-config --cflags fuse)
 CFLAGS += $(shell pkg-config --cflags sqlite3)
 CFLAGS += $(shell pkg-config --cflags libconfig)
 
-SRC := anfs.c config.c mdb.c util.c lineage.c \
+SRC := anfs.c config.c mdb.c osd.c util.c lineage.c \
 	pathdb-host.c
-INC := anfs.h config.h mdb.h list.h util.h \
+INC := anfs.h config.h mdb.h list.h osd.h sched.h util.h \
 	lineage.h pathdb-host.h
 
 OBJ := $(SRC:.c=.o)

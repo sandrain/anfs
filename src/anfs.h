@@ -57,7 +57,7 @@ struct anfs_active_job {
 #include "mdb.h"
 #include "osd.h"
 #include "lineage.h"
-//#include "sched.h"
+#include "sched.h"
 #include "store.h"
 #include "parser.h"
 
@@ -69,10 +69,8 @@ struct anfs_ctx {
 	struct anfs_config config;
 	struct anfs_mdb mdb;
 	struct anfs_lineage lineage;
-#if 0
 	struct anfs_osd osd;
 	struct anfs_sched sched;
-#endif
 	struct anfs_store store;
 
 	struct anfs_pathdb pathdb;
@@ -86,10 +84,8 @@ struct anfs_ctx {
 #define	anfs_config(x)	(&(x)->config)
 #define	anfs_mdb(x)	(&(x)->mdb)
 #define anfs_lineage(x)	(&(x)->lineage)
-#if 0
 #define	anfs_osd(x)	(&(x)->osd)
 #define	anfs_sched(x)	(&(x)->sched)
-#endif
 #define anfs_store(x)	(&(x)->store)
 #define anfs_pathdb(x)	(&(x)->pathdb)
 

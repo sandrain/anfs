@@ -220,30 +220,10 @@ static inline void anfs_sched_dump_job(struct anfs_job *job, FILE *st)
  * external interface
  */
 
-/**
- * 
- *
- * @self
- *
- * 
- */
 int anfs_sched_init(struct anfs_sched *self);
 
-/**
- * 
- *
- * @self
- */
 void anfs_sched_exit(struct anfs_sched *self);
 
-/**
- * 
- *
- * @self
- * @ino
- *
- * 
- */
 int anfs_sched_submit_job(struct anfs_sched *self, const uint64_t ino);
 
 #endif	/** __AFS_SCHED_H__ */
