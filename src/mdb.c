@@ -451,7 +451,7 @@ static int get_inode_attr(struct anfs_mdb *self, uint64_t ino,
 		goto out;
 	}
 
-	stbuf->st_ino = ino;
+	stbuf->st_ino = sqlite3_column_int64(stmt, 0);
 	stbuf->st_dev = sqlite3_column_int(stmt, 1);
 	stbuf->st_mode = sqlite3_column_int(stmt, 2);
 	stbuf->st_nlink = sqlite3_column_int(stmt, 3);

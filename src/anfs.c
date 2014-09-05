@@ -46,8 +46,11 @@ static struct anfs_ctx *ctx = &__ctx;
 
 static int anfs_getattr(const char *path, struct stat *stbuf)
 {
+	int ret = 0;
 	struct anfs_ctx *self = anfs_fuse_ctx;
-	return anfs_mdb_getattr(anfs_mdb(self), path, stbuf);
+	ret = anfs_mdb_getattr(anfs_mdb(self), path, stbuf);
+
+	return ret;
 }
 
 static int anfs_readlink(const char *path, char *link, size_t size)
@@ -209,10 +212,12 @@ static int anfs_write(const char *path, const char *buf, size_t size,
 	struct anfs_ctx *self = anfs_fuse_ctx;
 
 	if (handle->fd < 0) {
+		uint64_t ino;
+
 		switch (handle->ino) {
 		case ANFS_INO_SUBMIT:
-			ret = anfs_sched_submit_job(anfs_sched(ctx),
-							handle->ino);
+			ino = strtoul(buf, NULL, 0);
+			ret = anfs_sched_submit_job(anfs_sched(ctx), ino);
 			break;
 		default:
 			break;
@@ -604,6 +609,11 @@ int main(int argc, char **argv)
 		return -EINVAL;
 	}
 #endif
+
+	if (fuse_opt_add_arg(&args, "-ouse_ino")) {
+		fprintf(stderr, "failed to enable inode use!\n");
+		return -EINVAL;
+	}
 
 	if (!anfs_conf_file)
 		anfs_conf_file = ANFS_DEFAULT_CONF_FILE;

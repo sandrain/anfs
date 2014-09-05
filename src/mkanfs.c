@@ -253,10 +253,12 @@ static int do_mkfs(void)
 
 	/** create data directories for exofs mode */
 	printf("preparing data storage...\n");
+#if 0
 	if (direct)
 		ret = create_partition();
 	else
 		ret = create_directories();
+#endif
 
 	ret = sqlite3_exec(db, "end transaction;", NULL, NULL, NULL);
 	goto out_close;

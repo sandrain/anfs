@@ -31,7 +31,7 @@ datapath=`cat $jobfile | grep ^datadir | cut -d\" -f2`
 outfilelist=`cat $1 | grep "^[ \t]*output" | grep -Po "(?<=\")[^\",]+(?=\")"` 
 
 for outfile in $outfilelist; do
-	echo touch $mntpnt/$datapath/$outfile
+	touch $mntpnt/$datapath/$outfile
 done;
 
 echo $inode > $submit
