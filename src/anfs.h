@@ -30,6 +30,11 @@ enum {
 	ANFS_MAGIC		= 0x414e4653,	/* ANFS */
 };
 
+/**
+ * NOTE:
+ * the following macro names are kinda misleading. this translate between exofs
+ * inode number and osd object id. we must NOT use anfs inode # with those.
+ */
 #define	anfs_o2i(oid)		(oid - ANFS_OBJECT_OFFSET)
 #define	anfs_i2o(ino)		(ino + ANFS_OBJECT_OFFSET)
 

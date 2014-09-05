@@ -6,10 +6,10 @@ pid='0x22222'
 ./unmount.sh
 
 ## mount devices
-for i in `seq 0 3`; do
-	dev="/dev/osd$i"
-	dir="/mnt/afs$i"
-	mount -t exofs -o pid=$pid $dev $dir
+for osd in /dev/osd*; do
+	i=`echo $osd | grep -o [0-9]`
+	mkfs.exofs --pid=0x22222 --format --osdname=afe$i $osd
+	mount -t exofs -o pid=0x22222 $osd /mnt/afe$i
 done
 
 ## display the result

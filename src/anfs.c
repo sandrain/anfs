@@ -46,11 +46,8 @@ static struct anfs_ctx *ctx = &__ctx;
 
 static int anfs_getattr(const char *path, struct stat *stbuf)
 {
-	int ret = 0;
 	struct anfs_ctx *self = anfs_fuse_ctx;
-	ret = anfs_mdb_getattr(anfs_mdb(self), path, stbuf);
-
-	return ret;
+	return anfs_mdb_getattr(anfs_mdb(self), path, stbuf);
 }
 
 static int anfs_readlink(const char *path, char *link, size_t size)
@@ -165,6 +162,7 @@ static int anfs_open(const char *path, struct fuse_file_info *fi)
 
 	if (!handle)
 		return -ENOMEM;
+	memset(handle, 0, sizeof(*handle));
 
 	ret = anfs_mdb_get_ino_loc(anfs_mdb(self), path, &ino, &index);
 	if (ret)
@@ -223,7 +221,12 @@ static int anfs_write(const char *path, const char *buf, size_t size,
 			break;
 		}
 
-		return ret;
+		if (ret) {
+			errno = -EIO;
+			return -1;
+		}
+
+		return size;
 	}
 
 	/** only normal files will fall here. */

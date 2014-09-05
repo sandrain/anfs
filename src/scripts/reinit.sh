@@ -7,6 +7,7 @@ umount ../mnt
 ./pathdb-init.sh
 ./serverup.sh 1
 ./attach.sh
+./mount.sh
 
 cd .. && ./mkfs.sh
 

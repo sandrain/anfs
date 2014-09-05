@@ -1077,8 +1077,9 @@ out:
 int anfs_mdb_get_file_location(struct anfs_mdb *self, uint64_t ino,
 				int *location)
 {
-	int ret;
+	int ret, tmp;
 	sqlite3_stmt *stmt;
+	struct anfs_ctx *ctx = anfs_ctx(self, mdb);
 
 	stmt = stmt_get(self, MDB_SQL_GETLOCATION);
 	ret = sqlite3_bind_int64(stmt, 1, ino);
@@ -1096,7 +1097,9 @@ int anfs_mdb_get_file_location(struct anfs_mdb *self, uint64_t ino,
 		goto out;
 	}
 
-	*location = sqlite3_column_int64(stmt, 0);
+	tmp = sqlite3_column_int64(stmt, 0);
+	*location = tmp == -1 ? ino % anfs_super(ctx)->ndev : tmp;
+	ret = 0;
 
 out:
 	sqlite3_reset(stmt);

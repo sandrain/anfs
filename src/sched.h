@@ -23,14 +23,23 @@ enum {
 	ANFS_SCHED_DATA_REUSE,		/** can reuse old one from lineage */
 };
 
+/**
+ * because we are using the exofs backend by default, we have to keep track of
+ * following information about data files.
+ *  - anfs pathname
+ *  - anfs ino
+ *  - osd object id (exofs ino can be calculated from this: anfs_o2i(oid))
+ */
+
 struct anfs_data_file {
 	int available;
-	uint64_t ino;
-	int osd;
+	uint64_t ino;			/* anfs inode */
+	uint64_t oid;			/* osd object id */
+	int osd;			/* osd index */
 	uint64_t size;
 	struct anfs_task *producer;
 	uint64_t parent;
-	const char *path;
+	const char *path;		/* anfs pathname */
 };
 
 struct anfs_task_data {
@@ -43,12 +52,12 @@ struct anfs_task_data {
  */
 enum {
 	ANFS_SCHED_TASK_INIT	= 0,	/* task has been initialized */
-	ANFS_SCHED_TASK_BLOCKED,		/* needs some input to be produced */
+	ANFS_SCHED_TASK_BLOCKED,	/* needs some input to be produced */
 	ANFS_SCHED_TASK_WAITIO,		/* waiting for data transferring */
 	ANFS_SCHED_TASK_AVAIL,		/* all task inputs are available */
 	ANFS_SCHED_TASK_READY,		/* task is ready to run */
 	ANFS_SCHED_TASK_SKIP,		/* lineage hit, no need to run */
-	ANFS_SCHED_TASK_RUNNING,		/* task is currently running */
+	ANFS_SCHED_TASK_RUNNING,	/* task is currently running */
 	ANFS_SCHED_TASK_COMPLETE,	/* task finished successfully */
 	ANFS_SCHED_TASK_ABORT,		/* task aborted due to errors */
 	ANFS_SCHED_TASK_ABANDONED,	/* task abandoned due to job abort */
@@ -74,7 +83,8 @@ struct anfs_task {
 	struct anfs_task_data *output;
 
 	uint64_t tid;
-	uint64_t koid;
+	uint64_t koid;		/* kernel osd object id */
+	uint64_t kino;		/* kernel ino in anfs */
 
 	int affinity;		/** user-specified osd affinity,
 				 * -1 if not set. */

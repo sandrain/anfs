@@ -150,7 +150,7 @@ static int alloc_tasklet_input(struct anfs_parser_data *self,
 
 	count = config_setting_length(input);
 	tasklet->input = anfs_calloc(1, sizeof(struct anfs_task_data) +
-					count * sizeof(struct anfs_data_file *));
+				count * sizeof(struct anfs_data_file *));
 	tasklet->input->n_files = count;
 
 	for (i = 0; i < count; i++) {
@@ -227,13 +227,6 @@ static inline int alloc_tasklet_ios(struct anfs_parser_data *self,
 	return ret;
 }
 
-#if 0
-static int process_argument(struct anfs_parser_data *self, struct anfs_task *task)
-{
-	return 0;
-}
-#endif
-
 static int build_tasks(struct anfs_parser_data *self, struct anfs_job *job,
 			config_setting_t *task, struct list_head **link)
 {
@@ -249,12 +242,6 @@ static int build_tasks(struct anfs_parser_data *self, struct anfs_job *job,
 		cleanup_task(tasklet);
 		return 0;
 	}
-
-#if 0
-	ret = process_argument(self, tasklet);
-	if (ret)
-		return 0;
-#endif
 
 	*link = &tasklet->list;
 	return 1;
