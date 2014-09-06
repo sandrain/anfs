@@ -26,6 +26,9 @@
 #define	__anfs_unused(x)		((void) (x))
 
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static inline uint64_t anfs_now(void)
 {
@@ -149,6 +152,20 @@ static inline uint64_t anfs_now_usec(void)
 }
 
 /**
+ * get inode number from path
+ */
+static inline uint64_t get_file_ino(const char *path)
+{
+	struct stat buf;
+	int ret = stat(path, &buf);
+
+	if (ret < 0)
+		return 0;
+
+	return buf.st_ino;
+}
+
+/**
  * simple hash table wrapper using std hsearch.
  */
 #include <string.h>
@@ -168,7 +185,8 @@ static inline void anfs_hash_exit(anfs_htable *htab)
 	hdestroy_r(htab);
 }
 
-static inline int anfs_hash_insert(anfs_htable *htab, const char *key, void *val)
+static inline int anfs_hash_insert(anfs_htable *htab, const char *key,
+					void *val)
 {
 	ENTRY e, *tmp;
 

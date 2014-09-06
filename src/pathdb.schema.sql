@@ -6,20 +6,31 @@
 
 BEGIN TRANSACTION;
 
-DROP TABLE IF EXISTS anfs_obj_nspath;
+DROP TABLE IF EXISTS anfs_nspath;
+DROP TABLE IF EXISTS anfs_oids;
 
 CREATE TABLE anfs_nspath (
 	id	INTEGER NOT NULL,
-	pid	INTEGER NOT NULL,
-	oid	INTEGER NOT NULL,
+	ino	INTEGER NOT NULL,
 	nspath	TEXT NOT NULL,
 	runtime	INTEGER NOT NULL DEFAULT 0,
 
 	PRIMARY KEY (id asc),
-	UNIQUE (pid, oid)
+	unique (ino),
+	unique (nspath)
 );
 
 CREATE INDEX idx_nspath ON anfs_nspath (nspath);
+
+CREATE TABLE anfs_oids (
+	id	INTEGER NOT NULL,
+	ino	INTEGER NOT NULL REFERENCES anfs_nspath(ino),
+	osd	INTEGER NOT NULL,
+	oid	INTEGER NOT NULL,
+
+	PRIMARY KEY (id ASC),
+	UNIQUE (ino, osd, oid)
+);
 
 END TRANSACTION;
 

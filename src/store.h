@@ -90,7 +90,9 @@ struct anfs_copy_request {
 	int dest;
 	anfs_copy_callback_t callback;
 	struct anfs_task *task;
+	struct anfs_data_file *file;
 	void *priv;
+	uint64_t oid;		/* object id of newly replicated one */
 	uint64_t t_submit;
 	uint64_t t_complete;
 

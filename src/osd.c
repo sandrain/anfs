@@ -99,12 +99,12 @@ static int osd_execute_object_osdlib(struct osd_dev *osd,
 	struct anfs_task *task = req->task;
 	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
 	u32 len = task->argument ? strlen(task->argument) : 0;
-	u64 input = task->input_cid + ANFS_OBJECT_OFFSET;
-	u64 output = task->output_cid + ANFS_OBJECT_OFFSET;
+	u64 input = task->input_cid;
+	u64 output = task->output_cid;
 	char *param_str = task->argument;
 	struct osd_obj_id obj = {
 		.partition = req->partition,
-		.id = task->koid + ANFS_OBJECT_OFFSET
+		.id = task->koid
 	};
 	uint64_t tid;
 
@@ -167,9 +167,11 @@ static int osd_query_task_osdlib(struct osd_dev *osd,
 }
 /**
  * read the id from the /sys/fs/exofs/osdX/sync_id.
+ * on error returns 0.
  */
 static uint64_t get_exofs_sync_id(struct osd_dev *osd, int dev)
 {
+	int ret;
 	FILE *fp;
 	char sync_path[32];
 	uint64_t id;
@@ -179,9 +181,13 @@ static uint64_t get_exofs_sync_id(struct osd_dev *osd, int dev)
 	if (!fp)
 		return 0;
 
-	if (1 != fread((void *) &id, sizeof(id), 1, fp))
+	if (NULL == fgets(sync_path, 31, fp)) {
 		id = 0;
+		goto out;
+	}
 
+	sscanf(sync_path, "%lu", &id);
+out:
 	fclose(fp);
 
 	return id;
@@ -544,64 +550,12 @@ int anfs_osd_submit_request(struct anfs_osd *self,
 	return 0;
 }
 
-#if 0
-int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
-				uint64_t *cid)
-{
-
-	int ret;
-	u8 creds[OSD_CAP_LEN];
-	int nelem = 1;
-	void *iter = NULL;
-	struct osd_attr attr;
-	struct osd_dev *osd = self->workers[dev].osd;
-	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
-	struct osd_obj_id obj = { .partition = pid, .id = 0 };
-
-	if (unlikely(!or))
-		return -ENOMEM;
-
-	if (!cid) {
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (*cid)
-		obj.id = *cid + ANFS_OBJECT_OFFSET;
-
-	osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
-	osd_req_create_collection(or, &obj);
-
-	if (*cid == 0) {
-		/** we need to retrieve the collection id allocated */
-		attr.attr_page = OSD_APAGE_CURRENT_COMMAND;
-		attr.attr_id = OSD_APAGE_OBJECT_COLLECTIONS;
-		attr.len = sizeof(__be64);
-		attr.val_ptr = NULL;
-		ret = osd_req_add_get_attr_list(or, &attr, 1);
-	}
-
-	ret = osdblk_exec(or, creds);
-	if (ret)
-		goto out;
-
-	if (*cid == 0) {
-		osd_req_decode_get_attr_list(or, &attr, &nelem, &iter);
-		*cid = get_unaligned_be64(attr.val_ptr);
-	}
-
-out:
-	osd_end_request(or);
-
-	return ret;
-}
-#endif
-
 int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t *cid)
 {
 	int ret;
 	u8 creds[OSD_CAP_LEN];
+	uint64_t tmp;
 	struct osd_dev *osd = self->workers[dev].osd;
 	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
 	struct osd_obj_id obj = { .partition = pid, .id = 0 };
@@ -612,13 +566,10 @@ int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 	if (!cid)
 		return -EINVAL;
 
-	if (*cid)
-		obj.id = *cid + ANFS_OBJECT_OFFSET;
-	else {
-		*cid = obj.id = get_exofs_sync_id(osd, dev);
-		if (0 == *cid)
-			return -EIO;
-	}
+	if (0 == (tmp = get_exofs_sync_id(osd, dev)))
+		return -EIO;
+
+	obj.id = *cid = tmp + ANFS_OBJECT_OFFSET;
 
 	osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
 	osd_req_create_collection(or, &obj);
@@ -635,7 +586,7 @@ int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 	int i, ret = 0;
 	u8 creds[OSD_CAP_LEN];
 	struct osd_obj_id obj;
-	__be64 be_cid = cpu_to_be64(cid + ANFS_OBJECT_OFFSET);
+	__be64 be_cid = cpu_to_be64(cid);
 	struct osd_request *or;
 	struct osd_dev *osd = self->workers[dev].osd;
 	struct osd_attr membership = ATTR_SET(OSD_APAGE_OBJECT_COLLECTIONS, 1,
@@ -647,7 +598,7 @@ int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 		if (unlikely(!or))
 			return -ENOMEM;
 
-		obj.id = objs[i] + ANFS_OBJECT_OFFSET;
+		obj.id = objs[i];
 
 		osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
 
@@ -676,7 +627,7 @@ int anfs_osd_get_object_size(struct anfs_osd *self, int dev, uint64_t pid,
 	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
 	struct osd_obj_id obj = {
 		.partition = pid,
-		.id = oid + ANFS_OBJECT_OFFSET
+		.id = oid
 	};
 	int nelem = 1;
 	void *iter = NULL;

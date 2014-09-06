@@ -56,14 +56,16 @@ out:
 static void copy_file(struct anfs_copy_request *req, char *dest, char *src)
 {
 	int ret = 0;
+	uint64_t oid;
 	size_t n;
 	FILE *fpin, *fpout;
+	struct anfs_data_file *file = req->file;
 
 	if (NULL == (fpin = fopen(src, "r"))) {
 		ret = -errno;
 		goto out_err;
 	}
-	if (NULL == (fpout = fopen(src, "w"))) {
+	if (NULL == (fpout = fopen(dest, "w"))) {
 		ret = -errno;
 		goto out_err;
 	}
@@ -72,6 +74,15 @@ static void copy_file(struct anfs_copy_request *req, char *dest, char *src)
 		if (fwrite(cpbuf, sizeof(char), n, fpout) != n)
 			goto out_fpout;
 	}
+
+	oid = get_file_ino(dest) + ANFS_OBJECT_OFFSET;
+
+	if (file) {
+		file->osd = req->dest;
+		file->oid = oid;
+	}
+
+	req->oid = oid;
 
 out_fpout:
 	fclose(fpout);

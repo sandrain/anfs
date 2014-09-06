@@ -66,8 +66,14 @@ static int anfs_mknod(const char *path, mode_t mode, dev_t dev)
 	if (ret)
 		return ret;
 
-	if (S_ISREG(mode))	/** backend file for regular file. */
+	if (S_ISREG(mode)) {	/** backend file for regular file. */
 		ret = anfs_store_create(anfs_store(self), ino, -1);
+		if (ret)
+			return ret;
+		ret = anfs_pathdb_insert(anfs_pathdb(ctx), ino, path);
+		if (ret)
+			return ret;
+	}
 
 	return ret;
 }
@@ -80,8 +86,14 @@ static int anfs_mkdir(const char *path, mode_t mode)
 
 static int anfs_unlink(const char *path)
 {
+	int ret;
 	struct anfs_ctx *self = anfs_fuse_ctx;
-	return anfs_mdb_unlink(anfs_mdb(self), path);
+
+	ret = anfs_mdb_unlink(anfs_mdb(self), path);
+	if (ret)
+		return ret;
+
+	return anfs_pathdb_unlink(anfs_pathdb(ctx), path);
 }
 
 static int anfs_rmdir(const char *path)
@@ -98,8 +110,14 @@ static int anfs_symlink(const char *path, const char *link)
 
 static int anfs_rename(const char *old, const char *new)
 {
+	int ret;
 	struct anfs_ctx *self = anfs_fuse_ctx;
-	return anfs_mdb_rename(anfs_mdb(self), old, new);
+
+	ret = anfs_mdb_rename(anfs_mdb(self), old, new);
+	if (ret)
+		return ret;
+
+	return anfs_pathdb_rename(anfs_pathdb(ctx), old, new);
 }
 
 static int anfs_link(const char *path, const char *new)

@@ -48,7 +48,8 @@ struct anfs_osd_rstat {
 };
 
 struct anfs_osd_request;
-typedef void (*anfs_osd_req_callback_t) (int status, struct anfs_osd_request *r);
+typedef void (*anfs_osd_req_callback_t) (int status,
+						struct anfs_osd_request *r);
 
 struct anfs_osd_request {
 	uint64_t id;		/* request id */
@@ -129,7 +130,8 @@ void anfs_osd_exit(struct anfs_osd *self);
  *
  * returns 0 on success.
  */
-int anfs_osd_submit_request(struct anfs_osd *self, struct anfs_osd_request *req);
+int anfs_osd_submit_request(struct anfs_osd *self,
+				struct anfs_osd_request *req);
 
 /**
  * TODO:

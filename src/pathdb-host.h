@@ -26,13 +26,16 @@ int anfs_pathdb_init(struct anfs_pathdb *self, const char *dbfile);
 
 int anfs_pathdb_exit(struct anfs_pathdb *self);
 
-int anfs_pathdb_insert(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
-			const char *nspath);
+int anfs_pathdb_insert(struct anfs_pathdb *self, uint64_t ino,
+			const char *path);
 
-int anfs_pathdb_remove(struct anfs_pathdb *self, uint64_t pid, uint64_t oid);
+int anfs_pathdb_unlink(struct anfs_pathdb *self, const char *path);
 
-int anfs_pathdb_update(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
-			const char *nspath);
+int anfs_pathdb_rename(struct anfs_pathdb *self, const char *old,
+			const char *new);
+
+int anfs_pathdb_set_object(struct anfs_pathdb *self, uint64_t ino, int osd,
+				uint64_t oid);
 
 #endif	/** __PATHDB_H__ */
 

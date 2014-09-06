@@ -14,13 +14,15 @@ enum {
 	PATHDB_STMT_INSERT	= 0,
 	PATHDB_STMT_UPDATE,
 	PATHDB_STMT_REMOVE,
+	PATHDB_STMT_OBJECT,
 	PATHDB_STMTS
 };
 
 static const char *sqls[] = {
-	"INSERT INTO anfs_nspath (pid, oid, nspath, runtime) VALUES (?,?,?,?)",
-	"UPDATE anfs_nspath SET nspath=? WHERE pid=? AND oid=?",
-	"DELETE FROM anfs_nspath WHERE pid=? AND oid=?"
+	"insert into anfs_nspath (ino,nspath) values (?,?)",
+	"update anfs_nspath set nspath=? where nspath=?",
+	"delete from anfs_nspath where nspath=?",
+	"insert into anfs_oids (ino,osd,oid) values (?,?,?)",
 };
 
 static inline sqlite3_stmt *stmt_get(struct anfs_pathdb *self, int index)
@@ -72,15 +74,12 @@ out:
 
 int anfs_pathdb_exit(struct anfs_pathdb *self)
 {
-	int ret = 0;
+	int i, ret = 0;
 
 	if (self) {
 		if (self->stmts) {
-			int i;
-
 			for (i = 0; i < PATHDB_STMTS; i++)
 				sqlite3_finalize(self->stmts[i]);
-
 			free(self->stmts);
 		}
 
@@ -91,56 +90,18 @@ int anfs_pathdb_exit(struct anfs_pathdb *self)
 	return ret;
 }
 
-static inline uint64_t get_kernel_runtime(const char *path)
-{
-	/** montage */
-	if (strstr(path, "mImgtbl") != NULL)
-		return 1;
-	else if (strstr(path, "mProjectPP") != NULL)
-		return 5;
-	else if (strstr(path, "mAdd") != NULL)
-		return 5;
-	else if (strstr(path, "mJPEG") != NULL)
-		return 6;
-	else if (strstr(path, "mOverlaps") != NULL)
-		return 1;
-	else if (strstr(path, "mDiffFit") != NULL)
-		return 2;
-	else if (strstr(path, "mBgModel") != NULL)
-		return 1;
-	else if (strstr(path, "mBgExec") != NULL)
-		return 3;
-	/** brain */
-	else if (strstr(path, "align_warp") != NULL)
-		return 3;
-	else if (strstr(path, "reslice") != NULL)
-		return 4;
-	else if (strstr(path, "softmean") != NULL)
-		return 13;
-	else if (strstr(path, "slicer") != NULL)
-		return 4;
-	else if (strstr(path, "convert") != NULL)
-		return 1;
-	else
-		return 0;
-}
-
-int anfs_pathdb_insert(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
+int anfs_pathdb_insert(struct anfs_pathdb *self, uint64_t ino,
 			const char *nspath)
 {
 	int ret;
 	uint64_t runtime;
 	sqlite3_stmt *stmt;
 
-	runtime = get_kernel_runtime(nspath);
-
 	stmt = stmt_get(self, PATHDB_STMT_INSERT);
 
 	ret = 0;
-	ret |= sqlite3_bind_int64(stmt, 1, pid);
-	ret |= sqlite3_bind_int64(stmt, 2, oid);
-	ret |= sqlite3_bind_text(stmt, 3, nspath, -1, SQLITE_STATIC);
-	ret |= sqlite3_bind_int64(stmt, 4, runtime);
+	ret |= sqlite3_bind_int64(stmt, 1, ino);
+	ret |= sqlite3_bind_text(stmt, 2, nspath, -1, SQLITE_STATIC);
 	if (ret) {
 		ret = -EIO;
 		goto out;
@@ -157,7 +118,7 @@ out:
 	return ret;
 }
 
-int anfs_pathdb_remove(struct anfs_pathdb *self, uint64_t pid, uint64_t oid)
+int anfs_pathdb_unlink(struct anfs_pathdb *self, const char *nspath)
 {
 	int ret;
 	sqlite3_stmt *stmt;
@@ -165,8 +126,7 @@ int anfs_pathdb_remove(struct anfs_pathdb *self, uint64_t pid, uint64_t oid)
 	stmt = stmt_get(self, PATHDB_STMT_REMOVE);
 
 	ret = 0;
-	ret |= sqlite3_bind_int64(stmt, 1, pid);
-	ret |= sqlite3_bind_int64(stmt, 2, oid);
+	ret |= sqlite3_bind_text(stmt, 1, nspath, -1, SQLITE_STATIC);
 	if (ret) {
 		ret = -EIO;
 		goto out;
@@ -183,8 +143,8 @@ out:
 	return ret;
 }
 
-int anfs_pathdb_update(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
-			const char *nspath)
+int anfs_pathdb_rename(struct anfs_pathdb *self, const char *old,
+			const char *new)
 {
 	int ret;
 	sqlite3_stmt *stmt;
@@ -192,8 +152,36 @@ int anfs_pathdb_update(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
 	stmt = stmt_get(self, PATHDB_STMT_UPDATE);
 
 	ret = 0;
-	ret |= sqlite3_bind_text(stmt, 1, nspath, -1, SQLITE_STATIC);
-	ret |= sqlite3_bind_int64(stmt, 2, pid);
+	ret |= sqlite3_bind_text(stmt, 1, new, -1, SQLITE_STATIC);
+	ret |= sqlite3_bind_text(stmt, 2, old, -1, SQLITE_STATIC);
+	if (ret) {
+		ret = -EIO;
+		goto out;
+	}
+
+	do {
+		ret = sqlite3_step(stmt);
+	} while (ret == SQLITE_BUSY);
+
+	ret = ret == SQLITE_DONE ? 0 : -EIO;
+
+out:
+	sqlite3_reset(stmt);
+	return ret;
+}
+
+int anfs_pathdb_set_object(struct anfs_pathdb *self, uint64_t ino, int osd,
+				uint64_t oid)
+{
+	int ret;
+	uint64_t runtime;
+	sqlite3_stmt *stmt;
+
+	stmt = stmt_get(self, PATHDB_STMT_OBJECT);
+
+	ret = 0;
+	ret |= sqlite3_bind_int64(stmt, 1, ino);
+	ret |= sqlite3_bind_int(stmt, 2, osd);
 	ret |= sqlite3_bind_int64(stmt, 3, oid);
 	if (ret) {
 		ret = -EIO;
@@ -204,10 +192,18 @@ int anfs_pathdb_update(struct anfs_pathdb *self, uint64_t pid, uint64_t oid,
 		ret = sqlite3_step(stmt);
 	} while (ret == SQLITE_BUSY);
 
-	ret = ret == SQLITE_DONE ? 0 : -EIO;
+#if 0
+	if (ret == SQLITE_DONE)
+		ret = 0;
+	else if ((ret = sqlite3_extended_errcode(self->conn))
+			== SQLITE_IOERR_BLOCKED)
+		ret = 0;	/** this doesn't harm */
+	else
+		ret = -EIO;
+#endif
 
 out:
 	sqlite3_reset(stmt);
-	return ret;
+	return 0;
 }
 

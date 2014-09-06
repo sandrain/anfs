@@ -19,6 +19,7 @@ typedef	int (*anfs_sched_func_t) (struct anfs_ctx *, struct anfs_job *);
  * pathdb handling helpers
  */
 
+#if 0
 static inline int pathdb_insert(struct anfs_ctx *ctx, uint64_t ino)
 {
 	char path[2048];	/* should be enough for now */
@@ -45,6 +46,7 @@ static inline int pathdb_remove(struct anfs_ctx *ctx, uint64_t ino)
 			anfs_config(ctx)->partition,
 			ino + ANFS_OBJECT_OFFSET);
 }
+#endif
 
 /**
  * job id assignment
@@ -123,15 +125,6 @@ static inline int tq_unlock(int q)
 
 static inline void tq_append(struct anfs_task *task, int q)
 {
-#if 0
-	switch (q) {
-	case Q_WAITING: task->t_submit = anfs_now(); break;
-	case Q_RUNNING: task->t_start = anfs_now(); break;
-	case Q_COMPLETE: task->t_complete = anfs_now(); break;
-	default: return;
-	}
-#endif
-
 	task->q = q;
 	list_add_tail(&task->tqlink, &tq[q]);
 }
@@ -164,25 +157,31 @@ static int anfs_sched_input(struct anfs_ctx *afs, struct anfs_job *job);
 static uint64_t find_inode(struct anfs_ctx *afs, const char *path,
 			struct anfs_data_file *file)
 {
-	int ret;
+	int osd, ret;
 	uint64_t ino;
 	struct stat stbuf;
 
 	ret = anfs_mdb_getattr(anfs_mdb(afs), path, &stbuf);
-	if (!file)
-		return ret ? 0 : stbuf.st_ino;
-	ino = stbuf.st_ino;
+	if (ret)
+		return 0;
 
-	file->ino = ino;
-	file->osd = stbuf.st_blksize == 4096 ?
+	ino = stbuf.st_ino;
+	osd = stbuf.st_blksize == 4096 ?
 			ino % anfs_osd(afs)->ndev : (int) stbuf.st_blksize;
-	file->size = stbuf.st_size;
+
+	if (file) {
+		file->ino = stbuf.st_ino;
+		file->osd = stbuf.st_blksize == 4096
+				? ino % anfs_osd(afs)->ndev
+				: (int) stbuf.st_blksize;
+		file->size = stbuf.st_size;
+	}
 
 	return ino;
 }
 
 /**
- * NOTE:
+ * TODO:
  * this function does not work with arbitrary placed files (e.g. task output)
  *
  * on error, this function returns 0.
@@ -190,6 +189,7 @@ static uint64_t find_inode(struct anfs_ctx *afs, const char *path,
 static uint64_t get_osd_object_id(struct anfs_ctx *ctx, uint64_t anfs_ino)
 {
 	int ret;
+	int location;
 	struct stat stbuf;
 	char pathbuf[256];
 
@@ -204,23 +204,29 @@ static uint64_t get_osd_object_id(struct anfs_ctx *ctx, uint64_t anfs_ino)
 
 static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 {
-	int i, count;
+	int i, count, ret;
 	uint64_t ino, oid;
 	struct anfs_task *t;
 	struct anfs_task_data *td;
 	struct anfs_data_file *df;
+	struct anfs_data_file df_kernel;
 
 	list_for_each_entry(t, &job->task_list, list) {
 		if (!t)
 			continue;
 
-		ino = find_inode(afs, t->kernel, NULL);
+		ino = find_inode(afs, t->kernel, &df_kernel);
 		if (!ino)
 			return -EINVAL;
 		t->kino = ino;
 		t->koid = get_osd_object_id(afs, ino);
 		if (t->koid == 0)
 			return -EINVAL;
+
+		ret = anfs_pathdb_set_object(anfs_pathdb(afs), ino,
+						df_kernel.osd, t->koid);
+		if (ret)
+			return -EIO;
 
 		td = t->input;
 		count = td->n_files;
@@ -244,6 +250,11 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 					return -EINVAL;
 				df->oid = oid;
 				df->available = 1;
+
+				ret = anfs_pathdb_set_object(anfs_pathdb(afs),
+							ino, df->osd, oid);
+				if (ret)
+					return -EIO;
 			}
 		}
 
@@ -263,6 +274,11 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 				return -EINVAL;
 			df->oid = oid;
 			df->available = 0;
+
+			ret = anfs_pathdb_set_object(anfs_pathdb(afs), ino,
+							df->osd, oid);
+			if (ret)
+				return -EIO;
 		}
 	}
 
@@ -305,8 +321,8 @@ static void osd_task_complete_callback(int status, struct anfs_osd_request *r)
 
 	t->ret = status;
 
-anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n",
-		t->osd, anfs_llu(t->tid), status);
+anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n"
+		, t->osd, anfs_llu(t->tid), status);
 
 	if (status)
 		t->status = ANFS_SCHED_TASK_ABORT;
@@ -326,7 +342,7 @@ anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n",
 			struct anfs_data_file *file = t->output->files[i];
 
 			ret = anfs_osd_get_object_size(anfs_osd(afs), r->dev,
-						r->partition, file->ino,
+						r->partition, file->oid,
 						&size);
 			if (ret) {
 				/** 
@@ -384,7 +400,7 @@ out:
 static int prepare_collections(struct anfs_ctx *afs, struct anfs_task *t)
 {
 	int ret;
-	uint64_t cids[2];
+	uint64_t cids[2] = { 0, 0 };
 	uint64_t partition = anfs_config(afs)->partition;
 	struct anfs_osd *anfs_osd = anfs_osd(afs);
 	struct anfs_job *job = t->job;
@@ -430,12 +446,12 @@ static int fsm_request_task_execution(struct anfs_ctx *afs,
 
 	for (i = 0; i < t->input->n_files; i++) {
 		file = t->input->files[i];
-		inobjs[i] = file->ino;
+		inobjs[i] = file->oid;
 	}
 
 	for (i = 0; i < t->output->n_files; i++) {
 		file = t->output->files[i];
-		outobjs[i] = file->ino;
+		outobjs[i] = file->oid;
 	}
 
 	ret = anfs_osd_set_membership(anfs_osd(afs), t->osd, partition,
@@ -584,6 +600,7 @@ static void fsm_replication_callback(int status, struct anfs_copy_request *req)
 	struct anfs_ctx *ctx = (struct anfs_ctx *) req->priv;
 	struct anfs_task *t = req->task;
 	struct anfs_job *job = t->job;
+	struct anfs_data_file *file = req->file;
 
 	if (status == 0) {
 		ret = anfs_mdb_add_replication(anfs_mdb(ctx), req->ino,
@@ -593,6 +610,14 @@ static void fsm_replication_callback(int status, struct anfs_copy_request *req)
 anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!\n",
 		anfs_llu(req->ino), status);
 		}
+
+		/** check if we replicated the kernel object */
+		if (req->ino == t->kino)
+			t->koid = req->oid;
+
+		/** update the pathdb */
+		ret = anfs_pathdb_set_object(anfs_pathdb(ctx), req->ino,
+						req->dest, req->oid);
 
 		t->t_transfer += req->t_complete - req->t_submit;
 		t->n_transfers += 1;
@@ -605,9 +630,11 @@ anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!\n",
 		req->task->status = ANFS_SCHED_TASK_READY;
 	pthread_mutex_unlock(&t->stlock);
 
+#if 0
 anfs_task_log(t, "data transfer finished for ino %llu (status=%d), "
 		 "%d in-flight io presents\n",
 		anfs_llu(req->ino), status, t->io_inflight);
+#endif
 
 	free(req);
 }
@@ -652,6 +679,7 @@ static int get_replication_request(struct anfs_ctx *afs,
 	req->dest = tdev;
 	req->callback = &fsm_replication_callback;
 	req->priv = afs;
+	req->file = NULL;
 	/** req->task should be set by caller */
 
 	if (dev_out)
@@ -926,10 +954,13 @@ anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 		f = td->files[i];
 		ret = get_replication_request(afs, f->ino, target_dev, &dev,
 						&req);
-		if (ret < 0)
+		if (ret < 0) {
+			req->file = NULL;
 			return ret;
+		}
 		else if (ret == 1) {
 			req->task = t;
+			req->file = f;
 			anfs_store_request_copy(anfs_store(afs), req);
 			count++;
 
@@ -1203,11 +1234,10 @@ anfs_task_log(t, "task submitted to osd %d (ret = %d)\n", t->osd, ret);
 			pthread_mutex_unlock(&t->stlock);
 
 			if (exit)
-				goto out;
+				break;
 		}
 	}
 
-out:
 	return (void *) 0;
 }
 
