@@ -7,6 +7,7 @@
 BEGIN TRANSACTION;
 
 DROP TABLE IF EXISTS anfs_nspath;
+DROP TABLE IF EXISTS anfs_hostname;
 DROP TABLE IF EXISTS anfs_oids;
 
 CREATE TABLE anfs_nspath (
@@ -21,6 +22,15 @@ CREATE TABLE anfs_nspath (
 );
 
 CREATE INDEX idx_nspath ON anfs_nspath (nspath);
+
+CREATE TABLE anfs_hostname (
+	id	INTEGER NOT NULL,
+	host	TEXT NOT NULL,
+	osd	INTEGER NOT NULL,
+
+	PRIMARY KERY (id ASC),
+	UNIQUE (host, osd)
+);
 
 CREATE TABLE anfs_oids (
 	id	INTEGER NOT NULL,
