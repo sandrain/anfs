@@ -11,7 +11,8 @@ i=0
 for host in $hosts; do
 	sql="insert into anfs_hostname (host, osd) values "
 	sql+="('$host', $i)"
-	echo $sql
 	i=$((i+1))
+
+	sqlite3 $pathdb "$sql"
 done
 

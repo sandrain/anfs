@@ -28,7 +28,7 @@ CREATE TABLE anfs_hostname (
 	host	TEXT NOT NULL,
 	osd	INTEGER NOT NULL,
 
-	PRIMARY KERY (id ASC),
+	PRIMARY KEY (id ASC),
 	UNIQUE (host, osd)
 );
 
