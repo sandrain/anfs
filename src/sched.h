@@ -40,6 +40,9 @@ struct anfs_data_file {
 	struct anfs_task *producer;
 	uint64_t parent;
 	const char *path;		/* anfs pathname */
+
+	/** TODO: dynamically allocate this, merge this with oid */
+	uint64_t rep[ANFS_MAX_DEV];	/* replicated oid */
 };
 
 struct anfs_task_data {

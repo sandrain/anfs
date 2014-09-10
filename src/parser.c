@@ -65,7 +65,8 @@ static inline void cleanup_fail(struct anfs_parser_data *self)
 	cleanup_success(self);
 }
 
-static const char *get_anfs_bin_path(struct anfs_parser_data *self, const char *s)
+static const char *get_anfs_bin_path(struct anfs_parser_data *self,
+					const char *s)
 {
 	char *sb;
 

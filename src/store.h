@@ -102,5 +102,15 @@ static inline void anfs_store_request_copy(struct anfs_store *self,
 	pthread_mutex_unlock(&rq->lock);
 }
 
+static inline int anfs_store_update_size(struct anfs_store *self, uint64_t ino,
+						int index, uint64_t size)
+{
+	int pindex = index;
+	char pathbuf[PATH_MAX];
+	anfs_store_get_path(self, ino, &pindex, pathbuf);
+
+	return truncate(pathbuf, size);
+}
+
 #endif
 

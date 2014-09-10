@@ -168,6 +168,22 @@ static uint64_t get_osd_object_id(struct anfs_ctx *ctx, uint64_t anfs_ino)
 	return anfs_i2o(stbuf.st_ino);
 }
 
+static uint64_t get_osd_object_id_explcit(struct anfs_ctx *ctx, uint64_t ino,
+					int index)
+{
+	int ret, pindex = index;
+	struct stat stbuf;
+	char pathbuf[256];
+
+	anfs_store_get_path(anfs_store(ctx), ino, &pindex, pathbuf);
+
+	ret = stat(pathbuf, &stbuf);
+	if (ret < 0)
+		return 0;
+
+	return anfs_i2o(stbuf.st_ino);
+}
+
 static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 {
 	int i, count, ret;
@@ -211,6 +227,7 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 					return -EINVAL;
 				df->oid = oid;
 				df->available = 1;
+				df->rep[df->osd] = oid;
 			}
 		}
 
@@ -230,6 +247,7 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 				return -EINVAL;
 			df->oid = oid;
 			df->available = 0;
+			df->rep[df->osd] = oid;
 		}
 	}
 
@@ -287,7 +305,7 @@ anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n"
 		 * . set the location of the file in inode
 		 */
 		for (i = 0; i < t->output->n_files; i++) {
-			int ret = 0;
+			int k, ret = 0;
 			uint64_t size;
 			struct anfs_ctx *afs = (struct anfs_ctx *) r->priv;
 			struct anfs_data_file *file = t->output->files[i];
@@ -305,13 +323,19 @@ anfs_task_log(t, "task execution complete from osd %d (tid = %llu, ret = %d)\n"
 
 			ret = anfs_mdb_update_task_output_file(anfs_mdb(afs),
 						file->ino, t->osd, size);
-			file->osd = t->osd;	/** update current position */
-			file->size = size;
 
 anfs_task_log(t, "update output file metadata (ino=%llu, dev=%d, size=%llu)"
 		", (ret = %d)\n",
 		 anfs_llu(file->ino), t->osd, anfs_llu(size), ret);
 
+			if (ret) {
+				t->status = ANFS_SCHED_TASK_ABORT;
+				goto out;
+			}
+
+			file->size = size;
+			ret = anfs_store_update_size(anfs_store(afs),
+					file->ino, file->osd, file->size);
 			if (ret) {
 				t->status = ANFS_SCHED_TASK_ABORT;
 				goto out;
@@ -326,6 +350,12 @@ anfs_task_log(t, "invalidate replicas for output file (ino=%llu)"
 			if (ret) {
 				t->status = ANFS_SCHED_TASK_ABORT;
 				goto out;
+			}
+
+			for (k = 0; k < anfs_super(afs)->ndev; k++) {
+				if (k == t->osd)
+					continue;
+				file->rep[k] = 0;
 			}
 
 			file->available = 1;
@@ -361,7 +391,7 @@ static int prepare_collections(struct anfs_ctx *afs, struct anfs_task *t)
 	ret |= anfs_osd_create_collection(anfs_osd, t->osd, partition,
 						&cids[1]);
 
-anfs_task_log(t, "input/output collections create (ret=%d).\n", ret);
+anfs_task_log(t, "creating input/output collections (ret=%d).\n", ret);
 
 	if (!ret) {	/** success */
 		t->input_cid = cids[0];
@@ -397,12 +427,12 @@ static int fsm_request_task_execution(struct anfs_ctx *afs,
 
 	for (i = 0; i < t->input->n_files; i++) {
 		file = t->input->files[i];
-		inobjs[i] = file->oid;
+		inobjs[i] = file->rep[t->osd];
 	}
 
 	for (i = 0; i < t->output->n_files; i++) {
 		file = t->output->files[i];
-		outobjs[i] = file->oid;
+		outobjs[i] = file->rep[t->osd];
 	}
 
 	ret = anfs_osd_set_membership(anfs_osd(afs), t->osd, partition,
@@ -529,14 +559,6 @@ static inline int fsm_task_input_produced(struct anfs_task *t)
 	for (i = 0; i < input->n_files; i++)
 		if (!input->files[i]->available)
 			return 0;
-#if 0
-	/** this pollutes log too much */
-		else {
-anfs_task_log(t, "input %s is ready in osd %d.\n", input->files[i]->path,
-			input->files[i]->osd);
-		}
-#endif
-
 	/**
 	 * if no input files specified, return as if they were produced
 	 * already.
@@ -558,13 +580,18 @@ static void fsm_replication_callback(int status, struct anfs_copy_request *req)
 						req->dest);
 		if (ret) {
 			/** XXX: what a mess! what should we do? */
-anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!\n",
-		anfs_llu(req->ino), status);
+anfs_task_log(t, "file replication (%s, ino=%llu) failed (ret=%d) !\n",
+		file->path, anfs_llu(req->ino), status);
 		}
+
+anfs_task_log(t, "file replication (%s, ino=%llu) complete\n",
+		file->path, anfs_llu(req->ino));
 
 		/** check if we replicated the kernel object */
 		if (req->ino == t->kino)
 			t->koid = req->oid;
+
+		file->rep[req->dest] = req->oid;
 
 		/* update the path attribute of the newly created object */
 		ret = anfs_osd_set_path_attr(anfs_osd(ctx), req->dest,
@@ -581,12 +608,6 @@ anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!\n",
 	if (t->io_inflight <= 0)
 		req->task->status = ANFS_SCHED_TASK_READY;
 	pthread_mutex_unlock(&t->stlock);
-
-#if 0
-anfs_task_log(t, "data transfer finished for ino %llu (status=%d), "
-		 "%d in-flight io presents\n",
-		anfs_llu(req->ino), status, t->io_inflight);
-#endif
 
 	free(req);
 }
@@ -694,8 +715,8 @@ static const uint64_t minwait_bw = 50*(1<<20);		/** assume 100 MB/s */
 #endif
 static const uint64_t minwait_bw = (1<<29);		/** assume 1 GB/s */
 
-static double calculate_transfer_cost(struct anfs_ctx *afs, struct anfs_task *t,
-					int osd)
+static double calculate_transfer_cost(struct anfs_ctx *afs,
+					struct anfs_task *t, int osd)
 {
 	uint32_t i;
 	uint64_t bytes = 0, wait;
@@ -826,7 +847,7 @@ static int sched_minwait_assign_osd(struct anfs_ctx *afs, struct anfs_task *t)
 
 anfs_task_log(t, " -- osd[%d] = %lf seconds wait\n", i, wait[i]);
 
-		if (wait[i] <= minval) {	/** whenever there is a tie, change */
+		if (wait[i] <= minval) { /** whenever there is a tie, change */
 			min = i;
 			minval = wait[i];
 		}
@@ -835,7 +856,7 @@ anfs_task_log(t, " -- osd[%d] = %lf seconds wait\n", i, wait[i]);
 	wait_time[min] += dt[min] + get_task_runtime(t);
 	t->mw_submit = minwait_timestamp;
 
-anfs_task_log(t, " -- ## task submitted to osd %d\n", min);
+anfs_task_log(t, " -- ## task scheduled to osd %d\n", min);
 
 	return min;
 }
@@ -876,6 +897,7 @@ static int fsm_request_data_transfer(struct anfs_ctx *afs, struct anfs_task *t)
 	int ret = 0;
 	int i, count = 0;
 	int dev, target_dev = t->osd;
+	uint64_t oid;
 	struct anfs_task_data *td;
 	struct anfs_data_file *f;
 	struct anfs_copy_request *req;
@@ -884,18 +906,34 @@ static int fsm_request_data_transfer(struct anfs_ctx *afs, struct anfs_task *t)
 	/**
 	 * check out the kernel (.so) first
 	 */
+	if (NULL == (f = malloc(sizeof(*f))))
+		return -ENOMEM;
+
 	ret = get_replication_request(afs, t->kino, target_dev, &dev, &req);
 	if (ret < 0)
 		return ret;
-
-	if (ret == 1) {
+	else if (ret == 1) {
 		req->task = t;
+		if (NULL == (f = malloc(sizeof(*f))))
+			return -ENOMEM;
+		f->path = t->kernel;
+		f->ino = t->kino;
+		req->file = f;
+
 		anfs_store_request_copy(anfs_store(afs), req);
 		count++;
 
 anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 		 t->kernel, anfs_llu(req->ino), dev, target_dev, ret);
 	}
+	else if (ret == 0) {
+		oid = get_osd_object_id_explcit(afs, t->kino, target_dev);
+		if (0 == oid)
+			return -EINVAL;
+		f->rep[target_dev] = oid;
+	}
+	else
+		return -EINVAL;
 
 	/**
 	 * transfer input files.
@@ -919,6 +957,15 @@ anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 		 f->path, anfs_llu(req->ino), dev, target_dev, ret);
 		}
+		else if (ret == 0) {
+			oid = get_osd_object_id_explcit(afs, f->ino,
+							target_dev);
+			if (0 == oid)
+				return -EINVAL;
+			f->rep[target_dev] = oid;
+		}
+		else
+			return -EINVAL;
 	}
 
 	/**
@@ -932,6 +979,7 @@ anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 	for (i = 0; i < td->n_files; i++) {
 		int dev, index;
 
+		f = td->files[i];
 		ret = anfs_mdb_get_file_location(anfs_mdb(afs), f->ino,
 						&index);
 		if (ret)
@@ -939,18 +987,37 @@ anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 
 		dev = index == -1 ? f->ino % anfs_osd(afs)->ndev : index;
 
-
 		/**
 		 * if the output object has not been created on the target
 		 * device, create one.
 		 */
 		if (dev != t->osd) {
+			char pathbuf[PATH_MAX];
+			struct stat stbuf;
+
 			ret = anfs_store_create(anfs_store(afs), f->ino,
 						&t->osd);
 			if (ret) {
 				/** the object maybe already exist */
 				//return ret;
 			}
+
+			anfs_store_get_path(anfs_store(afs), f->ino, &t->osd,
+						pathbuf);
+			ret = stat(pathbuf, &stbuf);
+			if (ret < 0)
+				return -errno;
+
+			f->osd = t->osd;
+			f->oid = stbuf.st_ino + ANFS_OBJECT_OFFSET;
+
+			f->rep[f->osd] = f->oid;
+
+			ret = anfs_osd_set_path_attr(anfs_osd(afs), t->osd,
+					anfs_config(afs)->partition, f->oid,
+					(char *) f->path);
+			if (ret)
+				return ret;
 		}
 	}
 
