@@ -566,9 +566,10 @@ anfs_task_log(t, "file replication (%llu) seems to be failed (ret=%d) !!!!\n",
 		if (req->ino == t->kino)
 			t->koid = req->oid;
 
-		/** update the pathdb */
-		ret = anfs_pathdb_set_object(anfs_pathdb(ctx), req->ino,
-						req->dest, req->oid);
+		/* update the path attribute of the newly created object */
+		ret = anfs_osd_set_path_attr(anfs_osd(ctx), req->dest,
+				anfs_config(ctx)->partition, req->oid,
+				(char *) file->path);
 
 		t->t_transfer += req->t_complete - req->t_submit;
 		t->n_transfers += 1;

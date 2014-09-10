@@ -175,17 +175,10 @@ int anfs_store_create(struct anfs_store *self, uint64_t ino, int *index)
 	anfs_store_get_path(self, ino, index, pathbuf);
 	fp = fopen(pathbuf, "w");
 	if (!fp)
-		return -errno;
-	fclose(fp);
+		ret = -errno;
+	else
+		fclose(fp);
 
-#if 0
-	ret = stat(pathbuf, &stbuf);
-	if (ret < 0)
-		return -errno;
-
-	ret = anfs_pathdb_set_object(anfs_pathdb(ctx), ino, *index,
-				stbuf.st_ino + ANFS_OBJECT_OFFSET);
-#endif
 	return ret;
 }
 

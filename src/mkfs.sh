@@ -11,6 +11,3 @@ else
 	mkdir /tmp/afsjobs
 fi
 
-cd scripts
-./pathdb-init.sh
-

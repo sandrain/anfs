@@ -133,10 +133,8 @@ void anfs_osd_exit(struct anfs_osd *self);
 int anfs_osd_submit_request(struct anfs_osd *self,
 				struct anfs_osd_request *req);
 
-/**
- * TODO:
- * The following functions work synchronously.
- */
+#define	ANFS_APAGE_FS_DATA	(OSD_APAGE_APP_DEFINED_FIRST + 5)
+#define	ANFS_ATTR_NSPATH	1
 
 int anfs_osd_create_collection(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t *cid);
@@ -146,6 +144,9 @@ int anfs_osd_set_membership(struct anfs_osd *self, int dev, uint64_t pid,
 
 int anfs_osd_get_object_size(struct anfs_osd *self, int dev, uint64_t pid,
 				uint64_t oid, uint64_t *size);
+
+int anfs_osd_set_path_attr(struct anfs_osd *self, int dev, uint64_t pid,
+				uint64_t oid, char *path);
 
 #endif	/** __ANFS_OSD_H__ */
 

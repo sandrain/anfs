@@ -73,17 +73,15 @@ static int anfs_mknod(const char *path, mode_t mode, dev_t dev)
 		if (ret)
 			return ret;
 
-		ret = anfs_pathdb_insert(anfs_pathdb(ctx), ino, path);
-		if (ret)
-			return ret;
-
 		anfs_store_get_path(anfs_store(self), ino, &index, pathbuf);
 		ret = stat(pathbuf, &stbuf);
 		if (ret < 0)
 			return -errno;
 
-		ret = anfs_pathdb_set_object(anfs_pathdb(ctx), ino, index,
-					stbuf.st_ino + ANFS_OBJECT_OFFSET);
+		ret = anfs_osd_set_path_attr(anfs_osd(self), index,
+				anfs_config(self)->partition,
+				stbuf.st_ino + ANFS_OBJECT_OFFSET,
+				(char *) path);
 		if (ret)
 			return ret;
 	}
@@ -99,14 +97,8 @@ static int anfs_mkdir(const char *path, mode_t mode)
 
 static int anfs_unlink(const char *path)
 {
-	int ret;
 	struct anfs_ctx *self = anfs_fuse_ctx;
-
-	ret = anfs_mdb_unlink(anfs_mdb(self), path);
-	if (ret)
-		return ret;
-
-	return anfs_pathdb_unlink(anfs_pathdb(ctx), path);
+	return anfs_mdb_unlink(anfs_mdb(self), path);
 }
 
 static int anfs_rmdir(const char *path)
@@ -123,14 +115,28 @@ static int anfs_symlink(const char *path, const char *link)
 
 static int anfs_rename(const char *old, const char *new)
 {
-	int ret;
+	int ret, index;
+	uint64_t ino;
 	struct anfs_ctx *self = anfs_fuse_ctx;
+	struct stat stbuf;
+	char pathbuf[PATH_MAX];
+
+	ret = anfs_mdb_get_ino(anfs_mdb(self), old, &ino);
+	if (ret)
+		return ret;
 
 	ret = anfs_mdb_rename(anfs_mdb(self), old, new);
 	if (ret)
 		return ret;
 
-	return anfs_pathdb_rename(anfs_pathdb(ctx), old, new);
+	anfs_store_get_path(anfs_store(self), ino, &index, pathbuf);
+	ret = stat(pathbuf, &stbuf);
+	if (ret)
+		return ret;
+
+	return anfs_osd_set_path_attr(anfs_osd(self), index,
+			anfs_config(self)->partition,
+			stbuf.st_ino + ANFS_OBJECT_OFFSET, (char *) new);
 }
 
 static int anfs_link(const char *path, const char *new)
@@ -445,10 +451,6 @@ static void *anfs_init(struct fuse_conn_info *conn)
 	ret = anfs_store_init(anfs_store(self), ndev, devs);
 	if (ret)
 		goto out_err;
-	ret = anfs_pathdb_init(anfs_pathdb(self),
-				anfs_config(self)->pathdb_path);
-	if (ret)
-		goto out_err;
 
 	free(devstr);
 	return self;
@@ -461,7 +463,6 @@ static void anfs_destroy(void *context)
 {
 	struct anfs_ctx *self = anfs_fuse_ctx;
 
-	anfs_pathdb_exit(anfs_pathdb(self));
 	anfs_store_exit(anfs_store(self));
 	anfs_sched_exit(anfs_sched(self));
 	anfs_osd_exit(anfs_osd(self));

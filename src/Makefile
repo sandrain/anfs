@@ -19,10 +19,9 @@ CFLAGS += $(shell pkg-config --cflags fuse)
 CFLAGS += $(shell pkg-config --cflags sqlite3)
 CFLAGS += $(shell pkg-config --cflags libconfig)
 
-SRC := anfs.c config.c mdb.c osd.c lineage.c parser.c pathdb-host.c \
-	store.c sched.c
-INC := anfs.h config.h mdb.h osd.h lineage.h parser.h pathdb-host.h \
-	store.h sched.h list.h util.h
+SRC := anfs.c config.c mdb.c osd.c lineage.c parser.c store.c sched.c
+INC := anfs.h config.h mdb.h osd.h lineage.h parser.h store.h sched.h list.h \
+	util.h
 
 OBJ := $(SRC:.c=.o)
 LIB := $(shell pkg-config --libs sqlite3)
@@ -32,12 +31,8 @@ LIB += -L../../activeosd/open-osd/lib -losd
 
 DEPEND = .dependencies
 TARGETS = mkfs.anfs anfs
-PATHDB = /ccs/techint/home/hs2/afs_eval/pathdb.db
 
 all: $(DEPEND) $(TARGETS)
-
-#pathdb: $(PATHDB)
-
 
 ## activefs
 anfs: $(OBJ)
@@ -66,9 +61,4 @@ anfs-schema.c: db.schema.sql
 
 clean:
 	rm -f *.o $(DEPEND) $(TARGETS) anfs-schema.c
-
-## pathdb.db
-$(PATHDB): pathdb.schema.sql
-	rm -f $(PATHDB)
-	sqlite3 $(PATHDB) < pathdb.schema.sql
 

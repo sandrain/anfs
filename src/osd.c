@@ -652,3 +652,30 @@ int anfs_osd_get_object_size(struct anfs_osd *self, int dev, uint64_t pid,
 	return ret;
 }
 
+int anfs_osd_set_path_attr(struct anfs_osd *self, int dev, uint64_t pid,
+				uint64_t oid, char *path)
+{
+	int ret = 0;
+	struct osd_dev *osd = self->workers[dev].osd;
+	struct osd_request *or = osd_start_request(osd, GFP_KERNEL);
+	uint64_t len = strlen(path);
+	u8 creds[OSD_CAP_LEN];
+	struct osd_attr attr_nspath = ATTR_SET(
+			ANFS_APAGE_FS_DATA, ANFS_ATTR_NSPATH, len, path);
+	struct osd_obj_id obj = { .partition = pid, .id = oid };
+
+	if (unlikely(!or))
+		return -ENOMEM;
+
+	osdblk_make_credential(creds, &obj, osd_req_is_ver1(or));
+
+	osd_req_set_attributes(or, &obj);
+	osd_req_add_set_attr_list(or, &attr_nspath, 1);
+
+	ret = osdblk_exec(or, creds);
+
+	osd_end_request(or);
+
+	return ret;
+}
+

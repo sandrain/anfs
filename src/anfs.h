@@ -80,8 +80,6 @@ struct anfs_active_job {
 #include "store.h"
 #include "parser.h"
 
-#include "pathdb-host.h"
-
 struct anfs_ctx {
 	struct anfs_super super;
 
@@ -91,8 +89,6 @@ struct anfs_ctx {
 	struct anfs_osd osd;
 	struct anfs_sched sched;
 	struct anfs_store store;
-
-	struct anfs_pathdb pathdb;
 
 	const char *root;
 
@@ -106,7 +102,6 @@ struct anfs_ctx {
 #define	anfs_osd(x)	(&(x)->osd)
 #define	anfs_sched(x)	(&(x)->sched)
 #define anfs_store(x)	(&(x)->store)
-#define anfs_pathdb(x)	(&(x)->pathdb)
 
 #define anfs_ctx(ptr, member)	container_of(ptr, struct anfs_ctx, member)
 
