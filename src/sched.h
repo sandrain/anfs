@@ -155,7 +155,7 @@ static inline int anfs_job_log_open(struct anfs_job *job)
 		return -EINVAL;
 
 	//sprintf(nbuf, "/tmp/afsjobs/%llu", anfs_llu(job->id));
-	fp = fopen("/tmp/afsjobs/current", "w");
+	fp = fopen("/tmp/afsjobs/current", "a");
 
 	if (!fp)
 		return -errno;

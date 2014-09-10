@@ -58,19 +58,32 @@ static int anfs_readlink(const char *path, char *link, size_t size)
 
 static int anfs_mknod(const char *path, mode_t mode, dev_t dev)
 {
-	int ret;
+	int ret, index = -1;
 	uint64_t ino;
+	struct stat stbuf;
 	struct anfs_ctx *self = anfs_fuse_ctx;
+	char pathbuf[PATH_MAX];
 
 	ret = anfs_mdb_mknod(anfs_mdb(self), path, mode, dev, &ino);
 	if (ret)
 		return ret;
 
 	if (S_ISREG(mode)) {	/** backend file for regular file. */
-		ret = anfs_store_create(anfs_store(self), ino, -1);
+		ret = anfs_store_create(anfs_store(self), ino, &index);
 		if (ret)
 			return ret;
+
 		ret = anfs_pathdb_insert(anfs_pathdb(ctx), ino, path);
+		if (ret)
+			return ret;
+
+		anfs_store_get_path(anfs_store(self), ino, &index, pathbuf);
+		ret = stat(pathbuf, &stbuf);
+		if (ret < 0)
+			return -errno;
+
+		ret = anfs_pathdb_set_object(anfs_pathdb(ctx), ino, index,
+					stbuf.st_ino + ANFS_OBJECT_OFFSET);
 		if (ret)
 			return ret;
 	}

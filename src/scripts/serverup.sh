@@ -14,7 +14,7 @@ spath="/ccs/techint/home/hs2/workspace/activefs/activeosd/osc-osd/"
 PDSH="pdsh -w $servers"
 
 if [ $fresh -eq 1  ]; then
-	$PDSH "rm -rf /tmp/afe1/*"
+	$PDSH "rm -rf /tmp/osdstore/*"
 fi
 
 $PDSH "cd $spath && ./up"

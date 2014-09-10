@@ -16,39 +16,6 @@ enum {
 typedef	int (*anfs_sched_func_t) (struct anfs_ctx *, struct anfs_job *);
 
 /**
- * pathdb handling helpers
- */
-
-#if 0
-static inline int pathdb_insert(struct anfs_ctx *ctx, uint64_t ino)
-{
-	char path[2048];	/* should be enough for now */
-	int ret = anfs_mdb_get_full_path(anfs_mdb(ctx), ino, path);
-
-	return anfs_pathdb_insert(anfs_pathdb(ctx),
-			anfs_config(ctx)->partition,
-			ino + ANFS_OBJECT_OFFSET, path);
-}
-
-static inline int pathdb_update(struct anfs_ctx *ctx, uint64_t ino)
-{
-	char path[2048];
-	int ret = anfs_mdb_get_full_path(anfs_mdb(ctx), ino, path);
-
-	return anfs_pathdb_update(anfs_pathdb(ctx),
-			anfs_config(ctx)->partition,
-			ino + ANFS_OBJECT_OFFSET, path);
-}
-
-static inline int pathdb_remove(struct anfs_ctx *ctx, uint64_t ino)
-{
-	return anfs_pathdb_remove(anfs_pathdb(ctx),
-			anfs_config(ctx)->partition,
-			ino + ANFS_OBJECT_OFFSET);
-}
-#endif
-
-/**
  * job id assignment
  * TODO: delegate this to sqlite.
  */
@@ -188,12 +155,11 @@ static uint64_t find_inode(struct anfs_ctx *afs, const char *path,
  */
 static uint64_t get_osd_object_id(struct anfs_ctx *ctx, uint64_t anfs_ino)
 {
-	int ret;
-	int location;
+	int ret, index = -1;
 	struct stat stbuf;
 	char pathbuf[256];
 
-	anfs_store_get_path(anfs_store(ctx), anfs_ino, -1, pathbuf);
+	anfs_store_get_path(anfs_store(ctx), anfs_ino, &index, pathbuf);
 
 	ret = stat(pathbuf, &stbuf);
 	if (ret < 0)
@@ -223,11 +189,6 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 		if (t->koid == 0)
 			return -EINVAL;
 
-		ret = anfs_pathdb_set_object(anfs_pathdb(afs), ino,
-						df_kernel.osd, t->koid);
-		if (ret)
-			return -EIO;
-
 		td = t->input;
 		count = td->n_files;
 
@@ -250,11 +211,6 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 					return -EINVAL;
 				df->oid = oid;
 				df->available = 1;
-
-				ret = anfs_pathdb_set_object(anfs_pathdb(afs),
-							ino, df->osd, oid);
-				if (ret)
-					return -EIO;
 			}
 		}
 
@@ -274,11 +230,6 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 				return -EINVAL;
 			df->oid = oid;
 			df->available = 0;
-
-			ret = anfs_pathdb_set_object(anfs_pathdb(afs), ino,
-							df->osd, oid);
-			if (ret)
-				return -EIO;
 		}
 	}
 
@@ -994,7 +945,7 @@ anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 		 */
 		if (dev != t->osd) {
 			ret = anfs_store_create(anfs_store(afs), f->ino,
-						t->osd);
+						&t->osd);
 			if (ret) {
 				/** the object maybe already exist */
 				//return ret;
@@ -1373,7 +1324,7 @@ void anfs_sched_exit(struct anfs_sched *self)
 
 int anfs_sched_submit_job(struct anfs_sched *self, const uint64_t ino)
 {
-	int ret = 0;
+	int ret = 0, index = -1;
 	struct anfs_ctx *ctx = anfs_ctx(self, sched);
 	FILE *fp;
 	struct anfs_job *job = NULL;
@@ -1381,7 +1332,7 @@ int anfs_sched_submit_job(struct anfs_sched *self, const uint64_t ino)
 	char pathbuf[PATH_MAX];
 	char *buf;
 
-	anfs_store_get_path(anfs_store(ctx), ino, -1, pathbuf);
+	anfs_store_get_path(anfs_store(ctx), ino, &index, pathbuf);
 	ret = stat(pathbuf, &stbuf);
 	if (ret < 0)
 		return -EINVAL;

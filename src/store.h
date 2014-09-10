@@ -31,18 +31,20 @@ int anfs_store_init(struct anfs_store *self, const int ndev, char **backends);
 
 int anfs_store_exit(struct anfs_store *self);
 
-/** @index: pass -1 to use the default location (caculated by modular to ino) */
+/** @index: pass -1 to use the default location (caculated by modular to ino)
+ */
 static inline
-void anfs_store_get_path(struct anfs_store *self, uint64_t ino, int index,
+void anfs_store_get_path(struct anfs_store *self, uint64_t ino, int *index,
 			char *buf)
 {
-	int loc = index < 0 ? ino % self->n_backends : index;
+	int loc = *index < 0 ? ino % self->n_backends : *index;
 
 	if (ino < ANFS_INO_NORMAL) {	/* don't for virtual entries */
 		*buf = 0;
 		return;
 	}
 
+	*index = loc;
 	sprintf(buf, "%s/%02x/%016llx.anfs", self->backends[loc],
 			(uint8_t) (ino & 0xffUL), anfs_llu(ino));
 }
@@ -51,32 +53,23 @@ static inline
 int anfs_store_open(struct anfs_store *self, uint64_t ino, int index,
 			int flags)
 {
+	int pindex = index;
 	char pathbuf[PATH_MAX];
-	anfs_store_get_path(self, ino, index, pathbuf);
+	anfs_store_get_path(self, ino, &pindex, pathbuf);
 	return open(pathbuf, flags);
 }
 
-/** pass -1 as index for default file location */
-static inline
-int anfs_store_create(struct anfs_store *self, uint64_t ino, int index)
-{
-	FILE *fp;
-	char pathbuf[PATH_MAX];
-
-	anfs_store_get_path(self, ino, index, pathbuf);
-	fp = fopen(pathbuf, "w");
-	if (!fp)
-		return -errno;
-	fclose(fp);
-	return 0;
-}
+/** pass -1 as *index for default file location. the index will be set by
+ * this function */
+int anfs_store_create(struct anfs_store *self, uint64_t ino, int *index);
 
 static inline
 int anfs_store_truncate(struct anfs_store *self, uint64_t ino, int index,
 			uint64_t newsize)
 {
+	int pindex = index;
 	char pathbuf[PATH_MAX];
-	anfs_store_get_path(self, ino, index, pathbuf);
+	anfs_store_get_path(self, ino, &pindex, pathbuf);
 	return truncate(pathbuf, (off_t) newsize);
 }
 

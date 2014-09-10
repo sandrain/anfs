@@ -109,8 +109,8 @@ static void *copier(void *arg)
 		ino = req->ino;
 		src = req->src;
 		dest = req->dest;
-		anfs_store_get_path(anfs_store(ctx), ino, src, path_src);
-		anfs_store_get_path(anfs_store(ctx), ino, dest, path_dest);
+		anfs_store_get_path(anfs_store(ctx), ino, &src, path_src);
+		anfs_store_get_path(anfs_store(ctx), ino, &dest, path_dest);
 
 		copy_file(req, path_dest, path_src);
 	}
@@ -163,5 +163,29 @@ int anfs_store_exit(struct anfs_store *self)
 	pthread_mutex_destroy(&self->rq.lock);
 
 	return 0;
+}
+
+int anfs_store_create(struct anfs_store *self, uint64_t ino, int *index)
+{
+	int ret = 0;
+	FILE *fp;
+	char pathbuf[PATH_MAX];
+	struct anfs_ctx *ctx = anfs_ctx(self, store);
+
+	anfs_store_get_path(self, ino, index, pathbuf);
+	fp = fopen(pathbuf, "w");
+	if (!fp)
+		return -errno;
+	fclose(fp);
+
+#if 0
+	ret = stat(pathbuf, &stbuf);
+	if (ret < 0)
+		return -errno;
+
+	ret = anfs_pathdb_set_object(anfs_pathdb(ctx), ino, *index,
+				stbuf.st_ino + ANFS_OBJECT_OFFSET);
+#endif
+	return ret;
 }
 

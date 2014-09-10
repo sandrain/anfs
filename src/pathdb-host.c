@@ -30,6 +30,29 @@ static inline sqlite3_stmt *stmt_get(struct anfs_pathdb *self, int index)
 	return self->stmts[index];
 }
 
+static inline int exec_simple_sql(struct anfs_pathdb *self,
+				const char *sql)
+{
+	int ret;
+	ret = sqlite3_exec(self->conn, sql, NULL, NULL, NULL);
+	return ret == SQLITE_OK ? 0 : ret;
+}
+
+static inline int begin_transaction(struct anfs_pathdb *self)
+{
+	return exec_simple_sql(self, "begin transaction");
+}
+
+static inline int commit_transaction(struct anfs_pathdb *self)
+{
+	return exec_simple_sql(self, "end transaction");
+}
+
+static inline int abort_transaction(struct anfs_pathdb *self)
+{
+	return exec_simple_sql(self, "rollback");
+}
+
 int anfs_pathdb_init(struct anfs_pathdb *self, const char *dbfile)
 {
 	int i, ret;
@@ -60,7 +83,8 @@ int anfs_pathdb_init(struct anfs_pathdb *self, const char *dbfile)
 	}
 
 	self->stmts = stmts;
-	return 0;
+
+	return sqlite3_enable_shared_cache(1);
 
 out_prepare_sql:
 	for (--i ; i >= 0; i--)
@@ -107,11 +131,17 @@ int anfs_pathdb_insert(struct anfs_pathdb *self, uint64_t ino,
 		goto out;
 	}
 
+	begin_transaction(self);
+
 	do {
 		ret = sqlite3_step(stmt);
 	} while (ret == SQLITE_BUSY);
 
 	ret = ret == SQLITE_DONE ? 0 : -EIO;
+	if (ret)
+		abort_transaction(self);
+	else
+		commit_transaction(self);
 
 out:
 	sqlite3_reset(stmt);
@@ -132,11 +162,17 @@ int anfs_pathdb_unlink(struct anfs_pathdb *self, const char *nspath)
 		goto out;
 	}
 
+	begin_transaction(self);
+
 	do {
 		ret = sqlite3_step(stmt);
 	} while (ret == SQLITE_BUSY);
 
 	ret = ret == SQLITE_DONE ? 0 : -EIO;
+	if (ret)
+		abort_transaction(self);
+	else
+		commit_transaction(self);
 
 out:
 	sqlite3_reset(stmt);
@@ -159,11 +195,17 @@ int anfs_pathdb_rename(struct anfs_pathdb *self, const char *old,
 		goto out;
 	}
 
+	begin_transaction(self);
+
 	do {
 		ret = sqlite3_step(stmt);
 	} while (ret == SQLITE_BUSY);
 
 	ret = ret == SQLITE_DONE ? 0 : -EIO;
+	if (ret)
+		abort_transaction(self);
+	else
+		commit_transaction(self);
 
 out:
 	sqlite3_reset(stmt);
@@ -188,19 +230,24 @@ int anfs_pathdb_set_object(struct anfs_pathdb *self, uint64_t ino, int osd,
 		goto out;
 	}
 
+	begin_transaction(self);
+
 	do {
 		ret = sqlite3_step(stmt);
 	} while (ret == SQLITE_BUSY);
 
-#if 0
-	if (ret == SQLITE_DONE)
+	if (ret == SQLITE_DONE) {
 		ret = 0;
-	else if ((ret = sqlite3_extended_errcode(self->conn))
-			== SQLITE_IOERR_BLOCKED)
-		ret = 0;	/** this doesn't harm */
-	else
-		ret = -EIO;
-#endif
+		commit_transaction(self);
+	}
+	else {
+		abort_transaction(self);
+		if ((ret = sqlite3_extended_errcode(self->conn))
+				== SQLITE_IOERR_BLOCKED)
+			ret = 0;	/** this doesn't harm */
+		else
+			ret = -EIO;
+	}
 
 out:
 	sqlite3_reset(stmt);
