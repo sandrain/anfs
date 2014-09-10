@@ -360,31 +360,6 @@ static void *anfs_osd_worker_task_checker(void *arg)
 		lock_rq(data);
 		list_add_tail(&req->list, &data->rq);
 		unlock_rq(data);
-
-#if 0
-		if (ret || status.status != 2) {
-			/**
-			 * put it back to the queue.
-			 * XXX: we need to distinguish cases here.
-			 */
-			lock_rq(data);
-			list_add_tail(&req->list, &data->rq);
-			unlock_rq(data);
-
-			continue;
-		}
-
-		task = req->task;
-
-		/** set status status */
-		task->ret = status.ret;
-		task->t_submit = status.submit;
-		task->t_complete = status.complete;
-
-		/** execute the caller's callback */
-		if (req->callback)
-			(*req->callback) (task->ret, req);
-#endif
 	}
 
 	return (void *) ((unsigned long) ret);
