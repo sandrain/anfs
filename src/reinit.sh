@@ -30,4 +30,8 @@ mount | grep osd
 
 yes | ./mkfs.sh
 
+if [ ! -d ./mnt ]; then
+	mkdir mnt
+fi
+
 
