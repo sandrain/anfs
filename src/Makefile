@@ -13,7 +13,7 @@ CWARN = -Wall -Werror -Wpointer-arith -Wwrite-strings -Wcast-align -Wundef \
 	 -Wmissing-declarations -Wno-unused
 CFLAGS = $(COPTS) $(CWARN)
 
-OSDPATH = ../../activeosd/open-osd
+OSDPATH = /ccs/techint/proj/anFS/activeosd/open-osd
 CFLAGS += -I$(OSDPATH)/include -I$(OSDPATH)/include/open-osd -I$(OSDPATH)/lib
 CFLAGS += $(shell pkg-config --cflags fuse)
 CFLAGS += $(shell pkg-config --cflags sqlite3)
@@ -27,7 +27,7 @@ OBJ := $(SRC:.c=.o)
 LIB := $(shell pkg-config --libs sqlite3)
 LIB += $(shell pkg-config --libs fuse)
 LIB += $(shell pkg-config --libs libconfig)
-LIB += -L../../activeosd/open-osd/lib -losd
+LIB += -losd
 
 DEPEND = .dependencies
 TARGETS = mkfs.anfs anfs
