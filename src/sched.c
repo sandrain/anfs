@@ -58,9 +58,9 @@ static inline int jq_unlock(int q)
 static inline void jq_append(struct anfs_job *job, int q)
 {
 	switch (q) {
-	case Q_WAITING: job->t_submit = anfs_now(); break;
-	case Q_RUNNING: job->t_start = anfs_now(); break;
-	case Q_COMPLETE: job->t_complete = anfs_now(); break;
+	case Q_WAITING: job->t_submit = anfs_now_usec(); break;
+	case Q_RUNNING: job->t_start = anfs_now_usec(); break;
+	case Q_COMPLETE: job->t_complete = anfs_now_usec(); break;
 	default: return;
 	}
 
@@ -204,6 +204,7 @@ static int validate_data_files(struct anfs_ctx *afs, struct anfs_job *job)
 		t->koid = get_osd_object_id(afs, ino);
 		if (t->koid == 0)
 			return -EINVAL;
+		t->ksize = df_kernel.size;
 
 		td = t->input;
 		count = td->n_files;
@@ -576,6 +577,8 @@ static void fsm_replication_callback(int status, struct anfs_copy_request *req)
 	struct anfs_data_file *file = req->file;
 
 	if (status == 0) {
+		req->t_complete = anfs_now_usec();
+
 		ret = anfs_mdb_add_replication(anfs_mdb(ctx), req->ino,
 						req->dest);
 		if (ret) {
@@ -584,12 +587,14 @@ anfs_task_log(t, "file replication (%s, ino=%llu) failed (ret=%d) !\n",
 		file->path, anfs_llu(req->ino), status);
 		}
 
-anfs_task_log(t, "file replication (%s, ino=%llu) complete\n",
-		file->path, anfs_llu(req->ino));
+anfs_task_log(t, "file replication (%s, ino=%llu, size=%llu) complete\n",
+		file->path, anfs_llu(req->ino), anfs_llu(file->size));
 
 		/** check if we replicated the kernel object */
-		if (req->ino == t->kino)
+		if (req->ino == t->kino) {
 			t->koid = req->oid;
+			free(req->file);
+		}
 
 		file->rep[req->dest] = req->oid;
 
@@ -600,6 +605,7 @@ anfs_task_log(t, "file replication (%s, ino=%llu) complete\n",
 
 		t->t_transfer += req->t_complete - req->t_submit;
 		t->n_transfers += 1;
+		t->bytes_transfers += file->size;
 	}
 
 	/** this field is continuously accessed/checked by the advancer */
@@ -899,7 +905,7 @@ static int fsm_request_data_transfer(struct anfs_ctx *afs, struct anfs_task *t)
 	int dev, target_dev = t->osd;
 	uint64_t oid;
 	struct anfs_task_data *td;
-	struct anfs_data_file *f;
+	struct anfs_data_file *f = NULL;
 	struct anfs_copy_request *req;
 	struct anfs_job *job = t->job;
 
@@ -918,6 +924,7 @@ static int fsm_request_data_transfer(struct anfs_ctx *afs, struct anfs_task *t)
 			return -ENOMEM;
 		f->path = t->kernel;
 		f->ino = t->kino;
+		f->size = t->ksize;
 		req->file = f;
 
 		anfs_store_request_copy(anfs_store(afs), req);
@@ -980,6 +987,7 @@ anfs_task_log(t, "request data transfer(%s (%llu), from osd %d to %d) = %d\n",
 		int dev, index;
 
 		f = td->files[i];
+		f->size = 0;
 		ret = anfs_mdb_get_file_location(anfs_mdb(afs), f->ino,
 						&index);
 		if (ret)
@@ -1039,35 +1047,36 @@ anfs_job_log(job, "aborting the job due to the task (%s at %p) failure..\n",
 
 static inline void report_job_statistics(struct anfs_job *job)
 {
-	uint64_t runtime, qtime;
+	double runtime, qtime;
 	struct anfs_task *task;
 
-	runtime = job->t_complete - job->t_submit;
+	runtime = (1.0 * (job->t_complete - job->t_submit)) / 1000000;
 
 	anfs_job_report(job, "\n===== JOB EXECUTION RESULT =====\n"
 			"ID\t= %llu\nNAME\t= %s\n"
-			"RUNTIME\t= %llu sec.\nSTATUS\t= %s\n",
-			anfs_llu(job->id), job->name,
-			anfs_llu(runtime), job->ret ? "aborted" : "success");
+			"RUNTIME\t= %.6f sec.\nSTATUS\t= %s\n",
+			anfs_llu(job->id), job->name, runtime,
+			job->ret ? "aborted" : "success");
 
 	anfs_job_report(job, "\n===== RESULT OF EACH TASKS =====\n");
 
 	list_for_each_entry(task, &job->task_list, list) {
-		runtime = task->t_complete - task->t_submit;
-		qtime = task->t_start - task->t_submit;
+		runtime = (1.0*(task->t_complete - task->t_submit)) / 1000000;
+		qtime = (1.0*(task->t_start - task->t_submit)) / 1000000;
 		anfs_job_report(job, "[%s]\n"
-			"RUNTIME\t= %llu sec (QTIME = %llu)\n"
-			"AFE = %d (%llu, %llu)\n"
+			"RUNTIME\t= %.6f sec (QTIME = %.6f)\n"
+			"AFE = %d (%.6f, %.6f)\n"
 			"FILE TRANSFER = %llu\n"
-			"TRANSFER SIZE = %llu bytes\n"
-			"TRANSFER TIME = %llu sec.\n\n",
+			"TRANSFER SIZE = %.4f Kbytes\n"
+			"TRANSFER TIME = %.6f sec.\n\n",
 			task->name,
-			anfs_llu(runtime), anfs_llu(qtime),
+			runtime, qtime,
 			task->osd,
-			anfs_llu(task->t_start), anfs_llu(task->t_complete),
+			(1.0*task->t_start)/1000000,
+			(1.0*task->t_complete)/1000000,
 			anfs_llu(task->n_transfers),
-			anfs_llu(task->bytes_transfers),
-			anfs_llu(task->t_transfer));
+			task->bytes_transfers / 1024.0,
+			(1.0 * task->t_transfer)/1000000);
 	}
 }
 
@@ -1138,7 +1147,7 @@ static int fsm_handle_task_completion(struct anfs_ctx *afs,
 		list_del(&job->list);
 		jq_unlock(Q_RUNNING);
 
-		job->t_complete = anfs_now();
+		job->t_complete = anfs_now_usec();
 
 		/**
 		 * the only failure might happen is that updating lineage db

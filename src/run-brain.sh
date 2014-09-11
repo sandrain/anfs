@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if [ -z `mount | grep ^anfs` ]; then
+if [ -z "`mount | grep ^anfs`" ]; then
 	echo "anfs is not mounted, mounting.."
 	./anfs mnt
 fi

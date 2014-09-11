@@ -307,7 +307,7 @@ static void *anfs_osd_worker_func(void *arg)
 		 */
 		if (req->type != ANFS_OSD_RQ_EXECUTE) {
 			req->status = ret;
-			req->t_complete = anfs_now();
+			req->t_complete = anfs_now_usec();
 			if (req->callback)
 				(*req->callback) (ret, req);
 		}
@@ -347,7 +347,7 @@ static void *anfs_osd_worker_task_checker(void *arg)
 			task->t_start = status.start;
 			task->t_complete = status.complete;
 
-			req->t_complete = anfs_now();
+			req->t_complete = anfs_now_usec();
 
 			if (req->callback)
 				(*req->callback) (task->ret, req);
@@ -514,7 +514,7 @@ int anfs_osd_submit_request(struct anfs_osd *self,
 
 	worker = &self->workers[req->dev];
 
-	req->t_submit = anfs_now();
+	req->t_submit = anfs_now_usec();
 	req->osd = worker->osd;
 	req->partition = self->partition;
 

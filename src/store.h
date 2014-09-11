@@ -97,6 +97,8 @@ static inline void anfs_store_request_copy(struct anfs_store *self,
 {
 	struct copy_queue *rq = &self->rq;
 
+	req->t_submit = anfs_now_usec();
+
 	pthread_mutex_lock(&rq->lock);
 	list_add_tail(&req->list, &rq->list);
 	pthread_mutex_unlock(&rq->lock);

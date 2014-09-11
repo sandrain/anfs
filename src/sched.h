@@ -88,6 +88,7 @@ struct anfs_task {
 	uint64_t tid;
 	uint64_t koid;		/* kernel osd object id */
 	uint64_t kino;		/* kernel ino in anfs */
+	uint64_t ksize;		/* kernel size */
 
 	int affinity;		/** user-specified osd affinity,
 				 * -1 if not set. */
@@ -176,10 +177,12 @@ static inline void anfs_job_log_close(struct anfs_job *job)
 }
 
 #define	anfs_job_log(job, format, args...)			\
-	fprintf(job->log, "[%llu] " format, anfs_llu(anfs_now()), ## args)
+	fprintf(job->log, "[%.6f] " format,			\
+			(1.0 * anfs_now_usec()) / 1000000, ## args)
 #define	anfs_task_log(task, format, args...)			\
-	fprintf(task->job->log, "[%llu] %s (%p): " format,	\
-			anfs_llu(anfs_now()), task->name, task, ## args)
+	fprintf(task->job->log, "[%.6f] %s (%p): " format,	\
+			(1.0 * anfs_now_usec()) / 1000000,	\
+			task->name, task, ## args)
 #define anfs_job_report(job, format, args...)			\
 	fprintf(job->log, format, ## args)
 

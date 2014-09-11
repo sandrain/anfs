@@ -30,13 +30,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static inline uint64_t anfs_now(void)
-{
-	struct timeval t;
-	gettimeofday(&t, NULL);
-	return t.tv_sec;
-}
-
 /**
  * linked list implementation taken from linux
  */
@@ -143,6 +136,8 @@ static inline uint64_t anfs_now_sec(void)
 	gettimeofday(&tmp, NULL);
 	return tmp.tv_sec;
 }
+
+#define anfs_now	anfs_now_sec
 
 static inline uint64_t anfs_now_usec(void)
 {
