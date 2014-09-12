@@ -698,7 +698,6 @@ anfs_task_log(t, "task is scheduled to osd %d\n", max);
 	return max;
 }
 
-#if 1
 /** minwait implementation.
  * minwait computes expected waiting time for a task before the task is
  * executed. This currently involves considering the following factors:
@@ -739,47 +738,6 @@ static double calculate_transfer_cost(struct anfs_ctx *afs,
 
 	return (double) bytes * 2 / minwait_bw + 0.5 * input->n_files;
 }
-
-/**
- * For the fast prototype, a shared file for each device is statically named
- * after the hostname itself.
- */
-
-#if 0
-static const char *devq_dir = "/ccs/techint/home/hs2/anfs_eval/devq/";
-static const char *osd_hostnames[] = {
-	"atom-a1", "atom-a2", "atom-b1", "atom-b2",
-	"atom-c1", "atom-c2", "atom-d1", "atom-d2"
-};
-
-static FILE *dfps[8];
-
-static double calculate_queue_cost(struct anfs_ctx *afs, int osd)
-{
-	FILE *fp;
-	char pathbuf[128];
-	uint64_t wait;
-	int random = rand();
-	double rv = ((double) random / RAND_MAX);
-
-	if (dfps[osd] == NULL) {
-		sprintf(pathbuf, "%s%s", devq_dir, osd_hostnames[osd]);
-		if ((fp = fopen(pathbuf, "r")) == NULL)
-			return 5 + rv;
-		else
-			dfps[osd] = fp;
-	}
-	else
-		fp = dfps[osd];
-
-	if (1 != fread(&wait, sizeof(wait), 1, fp))
-		wait = (uint64_t) 5;
-
-	return wait + rv;
-}
-#endif
-
-#endif
 
 static double wait_time[MINWAIT_MAXOSD];
 static double minwait_timestamp;

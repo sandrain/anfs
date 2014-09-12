@@ -22,12 +22,12 @@ static inline char *get_param_str(char *line)
 
 static inline int read_sched_policy(const char *str)
 {
-#if 0
 	if (!strncmp(str, "input", strlen("input")))
-		return AFS_SCHED_POLICY_INPUT;
+		return ANFS_SCHED_POLICY_INPUT;
+	else if (!strncmp(str, "rr", strlen("rr")))
+		return ANFS_SCHED_POLICY_MINWAIT;
 	else
-		return AFS_SCHED_POLICY_RR;
-#endif
+		return ANFS_SCHED_POLICY_RR;
 
 	/** TODO: rewrite this function once you add more policies */
 	return 0;
