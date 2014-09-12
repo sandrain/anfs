@@ -115,7 +115,7 @@ static int anfs_symlink(const char *path, const char *link)
 
 static int anfs_rename(const char *old, const char *new)
 {
-	int ret, index;
+	int ret, index = -1;
 	uint64_t ino;
 	struct anfs_ctx *self = anfs_fuse_ctx;
 	struct stat stbuf;
@@ -240,7 +240,7 @@ static int anfs_read(const char *path, char *buf, size_t size,
 static int anfs_write(const char *path, const char *buf, size_t size,
 			off_t offset, struct fuse_file_info *fi)
 {
-	int ret;
+	int ret = 0;
 	size_t written;
 	struct stat stbuf;
 	struct anfs_fh *handle = (struct anfs_fh *) fi->fh;
