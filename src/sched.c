@@ -717,8 +717,9 @@ anfs_task_log(t, "task is scheduled to osd %d\n", max);
 
 #if 0
 static const uint64_t minwait_bw = 50*(1<<20);		/** assume 100 MB/s */
-#endif
 static const uint64_t minwait_bw = (1<<29);		/** assume 1 GB/s */
+#endif
+static const uint64_t minwait_bw = (30*(1<<20));	/** assume 30 MB/s */
 
 static double calculate_transfer_cost(struct anfs_ctx *afs,
 					struct anfs_task *t, int osd)
@@ -764,6 +765,7 @@ static inline double minwait_get_wait_time(struct anfs_ctx *afs, int osd)
 	return wait_time[osd];
 }
 
+#if 0
 static inline double get_task_runtime(struct anfs_task *t)
 {
 	const char *path = t->name;
@@ -793,14 +795,16 @@ static inline double get_task_runtime(struct anfs_task *t)
 
 	return (ret + rv) * 2;
 }
+#endif
 
 static int sched_minwait_assign_osd(struct anfs_ctx *afs, struct anfs_task *t)
 {
+	int ret, min = 0;
 	uint32_t i;
-	int min = 0;
 	double minval = (double) UINT64_MAX;
 	double dt[MINWAIT_MAXOSD];
 	double wait[MINWAIT_MAXOSD];
+	double kernel_runtime;
 
 	memset(wait, 0x00, sizeof(uint64_t)*MINWAIT_MAXOSD);
 
@@ -809,7 +813,8 @@ static int sched_minwait_assign_osd(struct anfs_ctx *afs, struct anfs_task *t)
 		wait[i] = dt[i];
 		wait[i] += minwait_get_wait_time(afs, i);
 
-anfs_task_log(t, " -- osd[%d] = %lf seconds wait\n", i, wait[i]);
+anfs_task_log(t, " -- osd[%d] = %lf seconds wait (transfer = %lf, Q=%lf)\n",
+			i, wait[i], dt[i], wait[i]);
 
 		if (wait[i] <= minval) { /** whenever there is a tie, change */
 			min = i;
@@ -817,10 +822,14 @@ anfs_task_log(t, " -- osd[%d] = %lf seconds wait\n", i, wait[i]);
 		}
 	}
 
-	wait_time[min] += dt[min] + get_task_runtime(t);
+	ret = anfs_lineage_get_task_runtime(afs, t, &kernel_runtime);
+	if (ret < 0)
+		kernel_runtime = 1.0;
+	wait_time[min] += dt[min] + kernel_runtime;
 	t->mw_submit = minwait_timestamp;
 
-anfs_task_log(t, " -- ## task scheduled to osd %d\n", min);
+anfs_task_log(t, " -- ## task scheduled to osd %d (update wait time to %lf)\n",
+			min, wait_time[min]);
 
 	return min;
 }

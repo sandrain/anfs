@@ -44,5 +44,8 @@ int anfs_lineage_record_job_execution(struct anfs_ctx *ctx,
 	return 0;
 }
 
+int anfs_lineage_get_task_runtime(struct anfs_ctx *ctx,
+				struct anfs_task *task, double *runtime);
+
 #endif	/** __AFS_LINEAGE_H__ */
 
