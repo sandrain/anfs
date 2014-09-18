@@ -802,7 +802,8 @@ static int sched_minwait_assign_osd(struct anfs_ctx *afs, struct anfs_task *t)
 	int ret, min = 0;
 	uint32_t i;
 	double minval = (double) UINT64_MAX;
-	double dt[MINWAIT_MAXOSD];
+	double dt[MINWAIT_MAXOSD];	/** data transfer */
+	double cb[MINWAIT_MAXOSD];	/** controller busy time */
 	double wait[MINWAIT_MAXOSD];
 	double kernel_runtime;
 
@@ -810,11 +811,11 @@ static int sched_minwait_assign_osd(struct anfs_ctx *afs, struct anfs_task *t)
 
 	for (i = 0; i < anfs_osd(afs)->ndev; i++) {
 		dt[i] = calculate_transfer_cost(afs, t, i);
-		wait[i] = dt[i];
-		wait[i] += minwait_get_wait_time(afs, i);
+		cb[i] = minwait_get_wait_time(afs, i);
+		wait[i] = dt[i] + cb[i];
 
 anfs_task_log(t, " -- osd[%d] = %lf seconds wait (transfer = %lf, Q=%lf)\n",
-			i, wait[i], dt[i], wait[i]);
+			i, wait[i], dt[i], cb[i]);
 
 		if (wait[i] <= minval) { /** whenever there is a tie, change */
 			min = i;
