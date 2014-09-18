@@ -21,12 +21,3 @@ echo
 echo
 tail -f $logfile
 
-## this doesn't work
-#
-#while [ ! -f "$file" ]; do
-#	inotifywait -qqt 2 -e create -e moved_to $(dirname $logfile)
-#done
-#
-#tail -f $logfile
-
-

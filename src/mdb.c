@@ -186,13 +186,14 @@ static int find_ino_from_path(struct anfs_mdb *self,
 	uint64_t ino, parent;
 	char *sp, *tmp;
 	char *buf = strdup(path);
+	char *pbuf = buf;
 	size_t len = strlen(buf);
 
 	if (len > 1 && buf[len - 1] == '/')
 		buf[len - 1] = '\0';
 
 	parent = 1;
-	while ((sp = strsep(&buf, "/")) != NULL) {
+	while ((sp = strsep(&pbuf, "/")) != NULL) {
 		if (strempty(sp))
 			continue;
 
