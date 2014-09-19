@@ -1258,12 +1258,14 @@ static int anfs_sched_rr(struct anfs_ctx *afs, struct anfs_job *job)
 		t->status = fsm_task_input_produced(t) ?
 				ANFS_SCHED_TASK_AVAIL : ANFS_SCHED_TASK_BLOCKED;
 
-		if (t->affinity >= 0 && t->affinity < ndev)
+		if (t->affinity >= 0 && t->affinity < ndev) {
 			t->osd = t->affinity;
-		else
+anfs_task_log(t, "scheduled to osd %d (user affinity).\n", t->osd);
+		}
+		else {
 			t->osd = i++;
-
-anfs_task_log(t, "scheduled to osd %d\n", t->osd);
+anfs_task_log(t, "scheduled to osd %d.\n", t->osd);
+		}
 
 		if (i == ndev)
 			i = 0;
