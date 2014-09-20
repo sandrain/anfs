@@ -389,8 +389,10 @@ static int set_devpaths(struct anfs_osd *self, int ndev, char **mntpnts)
 	}
 
 	fclose(fp);
+#if 0
 	if (ferror(fp))
 		return -errno;
+#endif
 
 	return done == ndev ? 0 : -EINVAL;
 }
