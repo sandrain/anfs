@@ -1,11 +1,27 @@
 #!/bin/sh
 
+targetsh="scripts/targets.sh"
+
+if [ -n "$1" ]; then
+        targetsh="scripts/targets-$1.sh"
+        if [ ! -f "$targetsh" ]; then
+                echo "$targetsh is not valid"
+                exit 1
+        fi
+
+        ff=`basename $targetsh`
+        cd scripts
+        rm -f targets.sh
+        ln -s $ff targets.sh
+        cd ..
+fi
+
 umount ./mnt
 for dir in /mnt/afe*; do umount $dir; done
 rm -f /tmp/anfs.db
 
 ## read the target configuration
-source scripts/targets.sh
+source $targetsh
 
 . scripts/detach.sh
 . scripts/serverdown.sh
