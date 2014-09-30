@@ -4,8 +4,8 @@
 
 CC = gcc
 LD = $(CC)
-#COPTS = -ggdb -O0
-COPTS = -O2
+COPTS = -ggdb -O0
+#COPTS = -O2
 #COPTS += -pg
 COPTS += -fPIC -foptimize-sibling-calls -D_GNU_SOURCE -D_BSD_SOURCE
 CWARN = -Wall -Werror -Wpointer-arith -Wwrite-strings -Wcast-align -Wundef \

@@ -121,22 +121,27 @@ static int anfs_rename(const char *old, const char *new)
 	struct stat stbuf;
 	char pathbuf[PATH_MAX];
 
-	ret = anfs_mdb_get_ino(anfs_mdb(self), old, &ino);
+	ret = anfs_mdb_getattr(anfs_mdb(self), old, &stbuf);
 	if (ret)
 		return ret;
+	ino = stbuf.st_ino;
 
 	ret = anfs_mdb_rename(anfs_mdb(self), old, new);
-	if (ret)
+	if (ret || !S_ISREG(stbuf.st_mode))
 		return ret;
 
-	anfs_store_get_path(anfs_store(self), ino, &index, pathbuf);
+	/* only regular files fall back here. */
+	anfs_store_get_path(anfs_store(self), stbuf.st_ino, &index, pathbuf);
 	ret = stat(pathbuf, &stbuf);
 	if (ret)
 		return ret;
 
-	return anfs_osd_set_path_attr(anfs_osd(self), index,
-			anfs_config(self)->partition,
-			stbuf.st_ino + ANFS_OBJECT_OFFSET, (char *) new);
+	ret = anfs_osd_set_path_attr(anfs_osd(self), index,
+				anfs_config(self)->partition,
+				stbuf.st_ino + ANFS_OBJECT_OFFSET,
+				(char *) new);
+
+	return ret;
 }
 
 static int anfs_link(const char *path, const char *new)

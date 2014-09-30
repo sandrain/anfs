@@ -55,7 +55,7 @@ out:
 
 static void copy_file(struct anfs_copy_request *req, char *dest, char *src)
 {
-	int ret = 0;
+	int ret = 0, fd;
 	uint64_t oid;
 	size_t n;
 	FILE *fpin, *fpout;
@@ -74,6 +74,12 @@ static void copy_file(struct anfs_copy_request *req, char *dest, char *src)
 		if (fwrite(cpbuf, sizeof(char), n, fpout) != n)
 			goto out_fpout;
 	}
+
+	/** make sure the data hit device */
+	fd = fileno(fpout);
+	ret = fsync(fd);
+	if (ret)
+		goto out_fpout;
 
 	oid = get_file_ino(dest) + ANFS_OBJECT_OFFSET;
 
