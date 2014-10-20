@@ -14,14 +14,16 @@ CWARN = -Wall -Werror -Wpointer-arith -Wwrite-strings -Wcast-align -Wundef \
 CFLAGS = $(COPTS) $(CWARN)
 
 OSDPATH = /ccs/techint/proj/anFS/activeosd/open-osd
-CFLAGS += -I$(OSDPATH)/include -I$(OSDPATH)/include/open-osd -I$(OSDPATH)/lib
+CFLAGS += -I$(OSDPATH)/include -I$(OSDPATH)/include/open-osd -L$(OSDPATH)/lib
 CFLAGS += $(shell pkg-config --cflags fuse)
 CFLAGS += $(shell pkg-config --cflags sqlite3)
 CFLAGS += $(shell pkg-config --cflags libconfig)
 
-SRC := anfs.c config.c mdb.c osd.c lineage.c parser.c store.c sched.c
-INC := anfs.h config.h mdb.h osd.h lineage.h parser.h store.h sched.h list.h \
-	util.h
+SRC := anfs.c anfs_config.c anfs_mdb.c anfs_osd.c anfs_lineage.c \
+	anfs_parser.c anfs_store.c anfs_sched.c
+INC := anfs.h anfs_config.h anfs_mdb.h anfs_osd.h anfs_lineage.h \
+	anfs_parser.h anfs_store.h anfs_sched.h anfs_list.h \
+	anfs_util.h
 
 OBJ := $(SRC:.c=.o)
 LIB := $(shell pkg-config --libs sqlite3)
@@ -46,7 +48,7 @@ $(DEPEND): $(OBJ:.o=.c)
 
 ## mkactivefs
 mkfs.anfs: mkanfs.o anfs-schema.o
-	$(CC) $(CFLAGS) $(LIB) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LIB)
 
 mkanfs.o: mkanfs.c
 	$(CC) $(CFLAGS) -c $< -o $@

@@ -71,14 +71,14 @@ struct anfs_active_job {
 	int error;		/* error code */
 };
 
-#include "util.h"
-#include "config.h"
-#include "mdb.h"
-#include "osd.h"
-#include "lineage.h"
-#include "sched.h"
-#include "store.h"
-#include "parser.h"
+#include "anfs_util.h"
+#include "anfs_config.h"
+#include "anfs_mdb.h"
+#include "anfs_osd.h"
+#include "anfs_lineage.h"
+#include "anfs_sched.h"
+#include "anfs_store.h"
+#include "anfs_parser.h"
 
 struct anfs_ctx {
 	struct anfs_super super;

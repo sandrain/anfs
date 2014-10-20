@@ -33,7 +33,7 @@
 /**
  * linked list implementation taken from linux
  */
-#include "list.h"
+#include "anfs_list.h"
 
 #include <stdlib.h>
 #include <ctype.h>

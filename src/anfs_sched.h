@@ -9,7 +9,7 @@
 
 #include <stdio.h>
 #include <pthread.h>
-#include "parser.h"
+#include "anfs_parser.h"
 
 struct anfs_task;
 struct anfs_job;
