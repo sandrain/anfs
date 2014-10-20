@@ -68,42 +68,6 @@ PKG_CHECK_MODULES(FUSE, fuse, , AC_MSG_ERROR('Unable to find libfuse. Please mak
 PKG_CHECK_MODULES(SQLITE3, sqlite3, , AC_MSG_ERROR('Unable to find sqlite3. Please make sure library and header files are installed.'))
 PKG_CHECK_MODULES(LIBCONFIG, libconfig, , AC_MSG_ERROR('Unable to find libconfig. Please make sure library and header files are installed.'))
 
-# Some required kernel headers
-# ----------------------------
-#AC_DEFUN([LINUX_HEADERS_WITHDIR],[
-#	AC_MSG_CHECKING([--with-$1 value])
-#	AS_IF([test "$2" = "yes" -o "$2" = "no" -o "x$2" = "x"],
-#	 [AC_MSG_RESULT([simple ok (unspecified)])],
-#          [AS_IF([test ! -d "$2"],
-#                 [AC_MSG_RESULT([not found])
-#                  AC_MSG_WARN([Directory $2 not found])
-#                  AC_MSG_ERROR([Cannot continue])],
-#                 [AS_IF([test "x`ls $2/$3 2> /dev/null`" = "x"],
-#                        [AC_MSG_RESULT([not found])
-#                         AC_MSG_WARN([Expected file $2/$3 not found])
-#                         AC_MSG_ERROR([Cannot continue])],
-#                        [AC_MSG_RESULT([sanity check ok ($2)])]
-#                       )
-#                 ]
-#                )
-#          ]
-#         )
-#])dnl
-#AC_ARG_WITH([linux-headers], [AS_HELP_STRING([--with-linux-kernel=DIR],
-#	[Blablabla.])])
-#LINUX_HEADERS_WITHDIR([linux-headers],[$with_linux_headers],[include/asm/unaligned.h])
-#
-#maybe_linux_headers_dir="/usr/src/linux-headers"
-#AS_IF([test ! -z "$with_linux_headers" -a "$with_linux_headers" != "yes"],
-#	[LINUX_HEADERS_DIR=$with_linux_headers],[LINUX_HEADERS_DIR=$maybe_linux_headers_dir])
-#AC_MSG_WARN([Test: $LINUX_HEADERS_DIR])
-#AC_CHECK_FILE([$LINUX_HEADERS_DIR/include/asm/unaligned.h],
-#	[CPPFLAGS_save="${CPPFLAGS}"
-#		AC_SUBST([CPPFLAGS],["-I$LINUX_HEADERS_DIR/include $CPPFLAGS_save"])
-#		AC_MSG_WARN([cppflags: $CCPFLAGS])
-#	]
-#)
-
 # Add some default flags
 # ----------------------
 
