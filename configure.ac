@@ -23,6 +23,19 @@ AM_PROG_CC_C_O
 
 CPPFLAGS="$CPPFLAGS -I$srcdir/../include"
 
+# We use pkg-config so we check that it is available
+# --------------------------------------------------
+
+AC_MSG_CHECKING([pkg-config])
+if test m4_ifdef([PKG_CHECK_MODULES], [yes], [no]) == yes; then
+	AC_MSG_RESULT([yes]);
+else
+	AC_MSG_RESULT([no]);
+	AC_MSG_ERROR([
+pkg-config is required.
+See pkg-config.freedesktop.org])
+fi
+
 # LIBOSD_CHECK_WITHDIR(with_option_name, dir_value, file_in_dir)
 # ----------------------------------------------------
 AC_DEFUN([LIBOSD_CHECK_WITHDIR],[
@@ -64,9 +77,9 @@ AC_CHECK_LIB([osd], [osd_open], , AC_MSG_ERROR([Unable to locate libosd installa
 # Check for some additional packages
 # ----------------------------------
 
-PKG_CHECK_MODULES(FUSE, fuse, , AC_MSG_ERROR('Unable to find libfuse. Please make sure library and header files are installed.'))
-PKG_CHECK_MODULES(SQLITE3, sqlite3, , AC_MSG_ERROR('Unable to find sqlite3. Please make sure library and header files are installed.'))
-PKG_CHECK_MODULES(LIBCONFIG, libconfig, , AC_MSG_ERROR('Unable to find libconfig. Please make sure library and header files are installed.'))
+PKG_CHECK_MODULES([FUSE], [fuse], , AC_MSG_ERROR([Unable to find libfuse. Please make sure library and header files are installed.]))
+PKG_CHECK_MODULES([SQLITE3], [sqlite3], , AC_MSG_ERROR([Unable to find sqlite3. Please make sure library and header files are installed.]))
+PKG_CHECK_MODULES([LIBCONFIG], [libconfig], HAVE_LIBCONFIG=true, AC_MSG_ERROR([Unable to find libconfig. Please make sure library and header files are installed.]))
 
 # Add some default flags
 # ----------------------
