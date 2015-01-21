@@ -1,10 +1,13 @@
 /* Copyright (C) 2013	 - Hyogi Sim <hyogi@cs.vt.edu>
+ * Copyright (c) 2014-2015  UT-Battelle, LLC
+ *                          All rights reserved
  * 
  * Please refer to COPYING for the license.
  * ---------------------------------------------------------------------------
  * the main scheduler of activefs.
  */
 #include "anfs.h"
+#include "assert.h"
 
 enum {
 	Q_WAITING	= 0,
@@ -14,6 +17,12 @@ enum {
 };
 
 typedef	int (*anfs_sched_func_t) (struct anfs_ctx *, struct anfs_job *);
+
+static int
+get_task_min_wa (struct anfs_task   *task,
+                 struct anfs_ctx    *afs,
+                 float              *wa,
+                 uint32_t           *select_afe_index);
 
 /**
  * job id assignment
@@ -797,6 +806,31 @@ static inline double get_task_runtime(struct anfs_task *t)
 }
 #endif
 
+/**
+ * Placement function for the write amplification policy. This function will
+ * find the OSD that minimize the write amplification ratio.
+ *
+ * @param[in]	afs	ANFS context (i.e., ANFS configuration)
+ * @param[in]	t	Task to be scheduled
+ * @return	-1 if error
+ * @return	Index of the OSD that gives the minimum write amplification
+ *		ratio
+ */
+static int sched_wa_assign_osd (struct anfs_ctx *afs, struct anfs_task *t)
+{
+    uint32_t    afe_index;
+    float       wa;
+    int         rc;
+
+    rc = get_task_min_wa (t, afs, &wa, &afe_index);
+    if (rc == -1) {
+        fprintf (stderr, "get_task_min_wa() failed\n");
+        return -1;
+    }
+
+    return afe_index;
+}
+
 static int sched_minwait_assign_osd(struct anfs_ctx *afs, struct anfs_task *t)
 {
 	int ret, min = 0;
@@ -853,6 +887,9 @@ static inline void fsm_schedule_input_lazy(struct anfs_ctx *afs,
 		case ANFS_SCHED_POLICY_MINWAIT:
 			t->osd = sched_minwait_assign_osd(afs, t);
 			break;
+        case ANFS_SCHED_POLICY_WA:
+            t->osd = sched_wa_assign_osd (afs, t);
+            break;
 		default:
 			break;
 	}
@@ -1235,6 +1272,156 @@ anfs_task_log(t, "task submitted to osd %d (ret = %d)\n", t->osd, ret);
 	}
 
 	return (void *) 0;
+}
+
+/*
+ * Function used by the WA policy.
+ * Returns the size of all the input files of a given task.
+ *
+ * @param[in]	task	Target task
+ * @return	Total size of the all the input files.
+ */
+static size_t
+get_task_total_input_size (struct anfs_task *task)
+{
+    size_t  total_input_size = 0;
+    int     i;
+
+    assert (task);
+
+    for (i = 0; i < task->input->n_files; i++) {
+        total_input_size += task->input->files[i]->size;
+    }
+
+    return total_input_size;
+}
+
+/**
+ * Function used by the WA policy.
+ * Returns the amount of data that needs to be transfer for the assignment
+ * of a given task to a given AFE.
+ *
+ * @param[in]   task        Task for which we need to calculate the amount of
+ *                          data to move if assigned to a specific AFE.
+ * @param[in]   afe_idx     Index of the candidate AFE for task placement
+ * @param[out]  transfer    Amount of data to be transfered.
+ * @return      -1 if error
+ * @return      0 if success
+ */
+static int
+size_required_data_transfer (struct anfs_task   *task,
+                             int                afe_idx,
+                             size_t             *transfer)
+{
+    size_t      size = 0;
+    uint32_t    i;
+
+    assert (task);
+    assert (transfer);
+
+    for (i = 0; i < task->input->n_files; i++) {
+        if (task->input->files[i]->osd != afe_idx) {
+            size += task->input->files[i]->size;
+        }
+    }
+
+    *transfer = size;
+
+    return 0;
+}
+
+/**
+ * Function used by the WA policy.
+ * Return the write amplification ratio if a given task is assigned to a given
+ * AFE.
+ *
+ * @param[in]   task    Task for which we need to calculate the WA ratio
+ * @param[in]   afe     Target AFE
+ * @param[out]  task_wa Corresponding WA ratio
+ * @return      -1 if error
+ * @return      0 if success
+ */
+static int
+get_task_wa_for_afe (struct anfs_task       *task,
+                     int                    afe_idx,
+                     float                  *task_wa)
+{
+    size_t  data_moved;
+    size_t  total_data;
+    float   wa;
+    int     rc;
+
+    assert (task);
+    assert (task_wa);
+
+    rc = size_required_data_transfer (task, afe_idx, &data_moved);
+    if (rc != 0 || data_moved < 0) {
+        fprintf (stderr, "size_required_data_transfer() failed\n");
+        return -1;
+    }
+
+    total_data = get_task_total_input_size (task);
+    if (total_data <= 0) {
+        fprintf (stderr, "get_task_total_input_size() failed\n");
+        return -1;
+    }
+
+    wa = data_moved / total_data;
+
+    *task_wa = wa;
+
+    return 0;
+}
+
+/**
+ * Function used by the WA policy.
+ * Function that returns the index of the AFE that gives the minimum WA ratio
+ * when a task can be placed on an array of AFEs.
+ *
+ * @param[in]   task                Task for which we need to find the best AFE
+ *                                  (with the minimum WA ratio)
+ * @param[in]   afs                 Pointer to the structure representing the
+ *                                  complete AFS configuration (used to pull
+ *                                  data about the AFEs)
+ * @param[out]  wa                  Minimum WA ratio
+ * @param[out]  select_afe_index    Index of the AFE that gives the minimum WA
+ *                                  ratio
+ * @return -1 if error
+ * @return 0 if success
+ */
+static int
+get_task_min_wa (struct anfs_task   *task,
+                 struct anfs_ctx    *afs,
+                 float              *wa,
+                 uint32_t           *select_afe_index)
+{
+    float       tmp_wa;
+    float       min_wa      = -1;
+    uint32_t    afe_index   = 0;
+    uint32_t    i;
+    int         rc;
+
+    assert (task);
+    assert (wa);
+    assert (select_afe_index);
+
+    for (i = 0; i < anfs_osd(afs)->ndev; i++) {
+        rc = get_task_wa_for_afe (task, i, &tmp_wa);
+        if (tmp_wa < 0 || rc == -1) {
+            fprintf (stderr, "get_task_wa_for_afe() failed\n");
+            return -1;
+        }
+
+        if (min_wa == -1 || tmp_wa < min_wa) {
+            min_wa      = tmp_wa;
+            afe_index   = i;
+        }
+    }
+
+    *wa = min_wa;
+    *select_afe_index = afe_index;
+
+    return 0;
 }
 
 /**

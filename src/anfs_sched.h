@@ -1,4 +1,6 @@
 /* Copyright (C) 2013	 - Hyogi Sim <hyogi@cs.vt.edu>
+ * Copyright (c) 2014-2015	UT-Battelle, LLC
+ *				All rights reserved
  * 
  * Please refer to COPYING for the license.
  * ---------------------------------------------------------------------------
@@ -131,9 +133,10 @@ struct anfs_job {
 enum {
 	ANFS_SCHED_BIND_LAZY	= -1,
 
-	ANFS_SCHED_POLICY_RR	= 0,	/** default, round-robin */
-	ANFS_SCHED_POLICY_INPUT	= 1,	/** input locality */
-	ANFS_SCHED_POLICY_MINWAIT = 2,	/** minimum wait--greedy policy */
+	ANFS_SCHED_POLICY_RR	    = 0,	/** default, round-robin */
+	ANFS_SCHED_POLICY_INPUT	    = 1,	/** input locality */
+	ANFS_SCHED_POLICY_MINWAIT   = 2,	/** minimum wait--greedy policy */
+	ANFS_SCHED_POLICY_WA        = 3,    /** write amplification policy */
 
 	ANFS_SCHED_N_POLICIES,
 };

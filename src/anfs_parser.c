@@ -1,4 +1,6 @@
 /* Copyright (C) 2013	 - Hyogi Sim <hyogi@cs.vt.edu>
+ * Copyright (c) 2014-2015	UT-Battelle, LLC
+ *				All rights reserved
  * 
  * Please refer to COPYING for the license.
  * ---------------------------------------------------------------------------
@@ -271,6 +273,8 @@ static int parse_script(struct anfs_parser_data *self)
 			sched = ANFS_SCHED_POLICY_INPUT;
 		else if (strncmp(tmp, "minwait", strlen("minwait")) == 0)
 			sched = ANFS_SCHED_POLICY_MINWAIT;
+		else if (strncmp(tmp, "wa", strlen("wa")) == 0)
+			sched = ANFS_SCHED_POLICY_WA;
 		else
 			sched = 0;	/** default */
 	}
